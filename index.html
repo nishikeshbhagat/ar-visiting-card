@@ -1,0 +1,1847 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+<meta name="theme-color" content="#05070d" />
+<title>Nishikesh Bhagat · AR Visiting Card</title>
+<style>
+/* ============================================================
+   DESIGN TOKENS
+   ============================================================ */
+:root{
+  --bg:#05070d;
+  --bg2:#0a0f1c;
+  --ink:#eaf2ff;
+  --muted:#8b97b3;
+  --accent:#63d3ff;
+  --accent2:#8a7bff;
+  --glass:rgba(18,24,40,.55);
+  --glass-brd:rgba(140,170,220,.18);
+  --glass-hi:rgba(255,255,255,.06);
+  --shadow:0 18px 60px rgba(0,0,0,.55);
+  --r:18px;
+  --safe-t:env(safe-area-inset-top,0px);
+  --safe-b:env(safe-area-inset-bottom,0px);
+}
+
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+html,body{margin:0;height:100%;}
+body{
+  background:var(--bg);
+  color:var(--ink);
+  font-family:ui-sans-serif,-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  overflow:hidden;
+  position:fixed;
+  inset:0;
+  -webkit-font-smoothing:antialiased;
+  text-rendering:optimizeLegibility;
+}
+
+/* ============================================================
+   BACKGROUND LAYERS
+   #arContainer   → REAL mode: MindAR injects its own <video> (camera) +
+                     WebGL <canvas> here. This is the only place real
+                     camera pixels ever get shown.
+   #demoBg/#scene → DEMO mode: a synthetic backdrop + our own Three.js
+                     canvas, driven by a simulated timer. Never used at
+                     the same time as #arContainer.
+   ============================================================ */
+#arContainer{position:absolute;inset:0;width:100%;height:100%;z-index:1;background:#000;overflow:hidden;}
+#arContainer video{object-fit:cover;}
+#scene{position:absolute;inset:0;width:100%;height:100%;z-index:2;}
+#demoBg{
+  position:absolute;inset:0;width:100%;height:100%;z-index:0;
+  opacity:0;transition:opacity .6s ease;
+  background:
+    radial-gradient(120% 90% at 50% 8%, rgba(99,211,255,.10), transparent 55%),
+    radial-gradient(120% 90% at 80% 100%, rgba(138,123,255,.12), transparent 55%),
+    radial-gradient(100% 100% at 20% 90%, rgba(20,30,60,.6), transparent 60%),
+    linear-gradient(180deg,#070b16 0%,#05070d 60%,#04060c 100%);
+}
+#demoBg.on{opacity:1;}
+#demoBg::after{ /* faint floor grid to sell depth */
+  content:"";position:absolute;inset:0;
+  background-image:
+    linear-gradient(rgba(120,160,220,.05) 1px,transparent 1px),
+    linear-gradient(90deg,rgba(120,160,220,.05) 1px,transparent 1px);
+  background-size:44px 44px;
+  -webkit-mask-image:radial-gradient(120% 70% at 50% 118%,#000,transparent 62%);
+          mask-image:radial-gradient(120% 70% at 50% 118%,#000,transparent 62%);
+  transform:perspective(600px) rotateX(66deg);
+  transform-origin:bottom;opacity:.8;
+}
+
+/* ============================================================
+   OVERLAY (all UI floats above the scene)
+   ============================================================ */
+#overlay{position:absolute;inset:0;z-index:5;pointer-events:none;}
+#overlay > *{pointer-events:auto;}
+
+/* Vignette for premium depth — sits above both real + demo scenes */
+#vignette{position:absolute;inset:0;z-index:3;pointer-events:none;
+  background:radial-gradient(120% 100% at 50% 40%,transparent 55%,rgba(0,0,0,.55) 100%);}
+
+/* ---------- Eyebrow / label type ---------- */
+.eyebrow{font-size:11px;letter-spacing:.34em;text-transform:uppercase;color:var(--accent);
+  font-weight:600;opacity:.9;}
+
+/* ============================================================
+   START SCREEN
+   ============================================================ */
+#start{
+  position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;
+  text-align:center;padding:32px 26px calc(38px + var(--safe-b));gap:22px;
+  background:
+    radial-gradient(90% 60% at 50% 22%,rgba(99,211,255,.10),transparent 60%),
+    linear-gradient(180deg,rgba(5,7,13,.72),rgba(5,7,13,.92));
+  backdrop-filter:blur(3px);-webkit-backdrop-filter:blur(3px);
+  transition:opacity .5s ease,transform .5s ease;
+}
+#start.hide{opacity:0;transform:scale(1.04);pointer-events:none;}
+.mark{width:74px;height:74px;border-radius:22px;display:grid;place-items:center;margin-bottom:4px;
+  background:linear-gradient(160deg,rgba(99,211,255,.22),rgba(138,123,255,.16));
+  border:1px solid var(--glass-brd);box-shadow:var(--shadow),inset 0 1px 0 var(--glass-hi);}
+.mark svg{width:38px;height:38px;color:var(--accent);}
+#start h1{
+  font-size:clamp(28px,7.6vw,40px);line-height:1.05;margin:6px 0 0;font-weight:800;letter-spacing:-.02em;
+  background:linear-gradient(180deg,#ffffff,#bcd4f2);-webkit-background-clip:text;background-clip:text;color:transparent;
+}
+.intro-role{color:var(--ink);font-size:16px;font-weight:600;letter-spacing:.01em;margin:2px 0 0;opacity:.92;}
+.intro-tagline{color:var(--muted);font-size:12.5px;letter-spacing:.06em;text-transform:uppercase;margin:2px 0 0;}
+#start p.sub{color:var(--muted);font-size:15px;max-width:22rem;line-height:1.5;margin:12px 0 0;}
+.cta-wrap{display:flex;flex-direction:column;gap:12px;width:100%;max-width:320px;margin-top:6px;}
+.btn{
+  border:1px solid var(--glass-brd);border-radius:16px;font-size:15px;font-weight:600;
+  padding:15px 20px;cursor:pointer;color:var(--ink);letter-spacing:.01em;
+  transition:transform .12s ease,box-shadow .2s ease,background .2s ease;
+}
+.btn:active{transform:scale(.97);}
+.btn-ghost{background:var(--glass);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);color:var(--ink);}
+.hint{color:var(--muted);font-size:12px;opacity:.75;margin-top:2px;}
+.btn-textlink{background:none;border:0;color:var(--muted);font-size:13px;text-decoration:underline;
+  text-underline-offset:3px;cursor:pointer;padding:8px 12px;}
+.btn-textlink:active{opacity:.6;}
+
+/* ---------- AR intro hero (the mini scanning-frame on the start screen) ---------- */
+.mini-reticle{position:relative;width:150px;aspect-ratio:1.62/1;margin:0 auto 4px;}
+.mini-reticle .mark{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);margin:0;}
+.intro-sparks{position:absolute;inset:-34px;pointer-events:none;}
+.spark{position:absolute;width:4px;height:4px;border-radius:50%;background:var(--accent);
+  box-shadow:0 0 8px 2px var(--accent);opacity:0;animation:sparkle 2.6s ease-in-out infinite;}
+.spark:nth-child(2){top:70%;left:92%;animation-delay:.6s;background:var(--accent2);box-shadow:0 0 8px 2px var(--accent2);}
+.spark:nth-child(3){top:88%;left:10%;animation-delay:1.1s;}
+.spark:nth-child(4){top:4%;left:88%;animation-delay:1.6s;background:var(--accent2);box-shadow:0 0 8px 2px var(--accent2);}
+.spark:nth-child(1){top:8%;left:4%;}
+@keyframes sparkle{0%,100%{opacity:0;transform:scale(.4)}50%{opacity:1;transform:scale(1)}}
+
+/* ============================================================
+   SCANNING UI
+   ============================================================ */
+#scan{position:absolute;inset:0;display:none;place-items:center;}
+#scan.on{display:grid;}
+.reticle{position:relative;width:min(74vw,340px);aspect-ratio:1.62/1;}
+.corner{position:absolute;width:34px;height:34px;border:2.5px solid var(--accent);opacity:.9;
+  filter:drop-shadow(0 0 6px rgba(99,211,255,.5));}
+.corner.tl{top:0;left:0;border-right:0;border-bottom:0;border-top-left-radius:10px;}
+.corner.tr{top:0;right:0;border-left:0;border-bottom:0;border-top-right-radius:10px;}
+.corner.bl{bottom:0;left:0;border-right:0;border-top:0;border-bottom-left-radius:10px;}
+.corner.br{bottom:0;right:0;border-left:0;border-top:0;border-bottom-right-radius:10px;}
+.scanline{position:absolute;left:8px;right:8px;height:2px;top:8px;border-radius:2px;
+  background:linear-gradient(90deg,transparent,var(--accent),transparent);
+  box-shadow:0 0 16px 2px rgba(99,211,255,.55);
+  animation:scanline 2.1s cubic-bezier(.5,0,.5,1) infinite;}
+@keyframes scanline{0%{top:8px}50%{top:calc(100% - 10px)}100%{top:8px}}
+.detected .scanline,.detected .corner{opacity:0;transition:opacity .3s;}
+#detectRing{position:absolute;inset:-2px;border:2px solid var(--accent);border-radius:14px;opacity:0;
+  box-shadow:0 0 0 rgba(99,211,255,.6);}
+.detected #detectRing{animation:detectPulse .8s ease-out forwards;}
+@keyframes detectPulse{
+  0%{opacity:0;transform:scale(.96)}
+  25%{opacity:1}
+  100%{opacity:0;transform:scale(1.12);box-shadow:0 0 44px rgba(99,211,255,.0)}
+}
+
+/* ============================================================
+   STATUS PILL (top) + DEMO badge
+   ============================================================ */
+#status{
+  position:absolute;top:calc(18px + var(--safe-t));left:50%;transform:translateX(-50%);
+  display:none;align-items:center;gap:10px;padding:9px 16px;border-radius:999px;
+  background:var(--glass);border:1px solid var(--glass-brd);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);
+  font-size:13px;letter-spacing:.02em;color:var(--ink);box-shadow:var(--shadow);white-space:nowrap;
+}
+#status.on{display:flex;}
+.dot{width:8px;height:8px;border-radius:50%;background:var(--accent);box-shadow:0 0 10px var(--accent);}
+.dot.searching{animation:blinkdot 1s ease-in-out infinite;}
+.dot.ok{background:#4ade80;box-shadow:0 0 10px #4ade80;}
+.dot.lost{background:#ff6b6b;box-shadow:0 0 10px #ff6b6b;animation:blinkdot 1s ease-in-out infinite;}
+@keyframes blinkdot{0%,100%{opacity:1}50%{opacity:.25}}
+
+#demoBanner{
+  position:absolute;top:calc(60px + var(--safe-t));left:50%;transform:translateX(-50%);
+  display:none;align-items:center;gap:8px;padding:6px 14px;border-radius:999px;
+  background:rgba(255,180,60,.14);border:1px solid rgba(255,180,60,.4);color:#ffc76b;
+  font-size:11px;font-weight:700;letter-spacing:.08em;white-space:nowrap;
+}
+#demoBanner.on{display:flex;}
+
+/* ============================================================
+   FLOATING SOCIAL BUTTONS (orbit the character)
+   ============================================================ */
+#buttons{position:absolute;inset:0;pointer-events:none;}
+.ar-btn{
+  position:absolute;left:0;top:0;pointer-events:none;
+  display:flex;flex-direction:column;align-items:center;gap:7px;
+  border:0;background:transparent;padding:0;cursor:pointer;color:var(--ink);
+  opacity:0;will-change:transform;
+}
+.ar-btn.live{opacity:1;pointer-events:auto;}
+.ar-btn__f{display:flex;flex-direction:column;align-items:center;gap:7px;} /* float layer */
+.ar-btn__p{display:grid;place-items:center;transform:scale(1);}            /* entrance-scale layer */
+.ar-btn.in .ar-btn__p{animation:pop .55s cubic-bezier(.2,1.3,.4,1) both;}
+@keyframes pop{0%{transform:scale(0);opacity:0}60%{opacity:1}100%{transform:scale(1);opacity:1}}
+.ar-btn.in .ar-btn__f{animation:floaty 4.2s ease-in-out infinite;}
+@keyframes floaty{0%,100%{transform:translateY(0)}50%{transform:translateY(-7px)}}
+.orb{
+  width:58px;height:58px;border-radius:50%;display:grid;place-items:center;position:relative;
+  background:var(--glass);border:1px solid var(--glass-brd);
+  backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);
+  box-shadow:var(--shadow),inset 0 1px 0 var(--glass-hi);overflow:hidden;
+  transition:transform .12s ease;                                          /* tap-press layer */
+}
+.ar-btn:active .orb{transform:scale(.86);}
+.orb::before{content:"";position:absolute;inset:0;border-radius:50%;
+  background:radial-gradient(80% 80% at 50% 15%,var(--bc,rgba(99,211,255,.35)),transparent 70%);opacity:.9;}
+.orb svg{width:26px;height:26px;position:relative;z-index:1;color:var(--bc,var(--accent));
+  filter:drop-shadow(0 0 6px rgba(0,0,0,.4));}
+.ar-btn .lab{font-size:11px;letter-spacing:.03em;color:var(--ink);opacity:.9;
+  background:rgba(6,10,20,.5);padding:2px 9px;border-radius:999px;backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);}
+.ripple{position:absolute;border-radius:50%;background:var(--bc,var(--accent));opacity:.5;
+  transform:translate(-50%,-50%) scale(0);pointer-events:none;z-index:2;
+  animation:ripple .55s ease-out forwards;}
+@keyframes ripple{to{transform:translate(-50%,-50%) scale(4);opacity:0}}
+
+/* ============================================================
+   BOTTOM HUD (identity chip + scan again)
+   ============================================================ */
+#hud{
+  position:absolute;left:0;right:0;bottom:calc(18px + var(--safe-b));
+  display:none;align-items:center;justify-content:center;gap:12px;padding:0 16px;flex-wrap:wrap;
+}
+#hud.on{display:flex;animation:fadeUp .5s ease both;}
+@keyframes fadeUp{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:none}}
+.idchip{
+  display:flex;align-items:center;gap:11px;padding:8px 8px 8px 8px;border-radius:16px;
+  background:var(--glass);border:1px solid var(--glass-brd);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);
+  box-shadow:var(--shadow);max-width:78vw;
+}
+.avatar{width:40px;height:40px;border-radius:12px;flex:0 0 auto;display:grid;place-items:center;overflow:hidden;
+  background:linear-gradient(150deg,var(--accent),var(--accent2));color:#04121c;font-weight:800;font-size:16px;}
+.avatar img{width:100%;height:100%;object-fit:cover;}
+.idchip .who{display:flex;flex-direction:column;line-height:1.15;padding-right:6px;min-width:0;}
+.idchip .who b{font-size:14px;font-weight:700;}
+.idchip .who span{font-size:12px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+#again{
+  display:flex;align-items:center;gap:8px;padding:12px 16px;border-radius:16px;cursor:pointer;
+  background:var(--glass);border:1px solid var(--glass-brd);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);
+  color:var(--ink);font-size:14px;font-weight:600;box-shadow:var(--shadow);transition:transform .12s;
+}
+#again:active{transform:scale(.96);}
+#again svg{width:17px;height:17px;color:var(--accent);}
+
+/* ============================================================
+   DEBUG PANEL
+   ============================================================ */
+#debugToggle{
+  position:absolute;top:calc(14px + var(--safe-t));right:14px;width:34px;height:34px;border-radius:10px;
+  background:rgba(10,14,24,.5);border:1px solid var(--glass-brd);backdrop-filter:blur(10px);
+  display:grid;place-items:center;cursor:pointer;opacity:.55;color:var(--muted);font-size:15px;
+  transition:opacity .15s;
+}
+#debugToggle:active{opacity:1;}
+#debugPanel{
+  position:absolute;top:calc(56px + var(--safe-t));right:14px;display:none;
+  background:rgba(6,10,18,.78);border:1px solid var(--glass-brd);border-radius:10px;
+  padding:10px 12px;font:11px/1.6 ui-monospace,SFMono-Regular,Consolas,monospace;color:#9be29b;
+  white-space:pre;backdrop-filter:blur(10px);max-width:58vw;box-shadow:var(--shadow);
+}
+#debugPanel.on{display:block;}
+
+/* ============================================================
+   TOAST + FATAL
+   ============================================================ */
+#toast{position:absolute;bottom:calc(96px + var(--safe-b));left:50%;transform:translateX(-50%) translateY(12px);
+  background:var(--glass);border:1px solid var(--glass-brd);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);
+  padding:11px 16px;border-radius:12px;font-size:13px;color:var(--ink);box-shadow:var(--shadow);
+  opacity:0;pointer-events:none;transition:opacity .3s,transform .3s;max-width:84vw;text-align:center;}
+#toast.on{opacity:1;transform:translateX(-50%) translateY(0);}
+#fatal{position:absolute;inset:0;display:none;place-items:center;text-align:center;padding:30px;z-index:20;
+  background:linear-gradient(180deg,rgba(5,7,13,.9),rgba(5,7,13,.98));}
+#fatal.on{display:grid;}
+#fatal .box{max-width:340px;display:flex;flex-direction:column;align-items:center;gap:6px;}
+#fatal h2{font-size:20px;margin:0 0 8px;}
+#fatal p{color:var(--muted);font-size:14px;line-height:1.5;margin:0;}
+#fatal .cta-wrap{margin-top:14px;}
+#fatalDemoBtn{display:none;}
+#fatalDemoBtn.on{display:inline-flex;}
+
+/* ============================================================
+   LOW-TIER DEVICE FALLBACK
+   Set by DeviceTier.detect() on <html> — swaps every backdrop-filter glass
+   panel for a flat, more-opaque background instead. Same layout/contrast,
+   just without the per-frame compositor blur cost. See DeviceTier's comment.
+   ============================================================ */
+.perf-low #start,.perf-low .btn-ghost,.perf-low #status,.perf-low .orb,
+.perf-low .lab,.perf-low .idchip,.perf-low #again,.perf-low #debugToggle,
+.perf-low #debugPanel,.perf-low #toast{
+  backdrop-filter:none;-webkit-backdrop-filter:none;
+}
+.perf-low #start{background:linear-gradient(180deg,rgba(5,7,13,.94),rgba(5,7,13,.98));}
+.perf-low .btn-ghost,.perf-low #status,.perf-low .orb,.perf-low .idchip,.perf-low #again{
+  background:rgba(14,19,32,.86);
+}
+.perf-low .lab{background:rgba(6,10,20,.82);}
+.perf-low #debugToggle{background:rgba(10,14,24,.82);}
+.perf-low #debugPanel{background:rgba(6,10,18,.92);}
+.perf-low #toast{background:rgba(14,19,32,.9);}
+
+/* ============================================================
+   REDUCED MOTION
+   ============================================================ */
+@media (prefers-reduced-motion:reduce){
+  .scanline{animation:none;top:50%;}
+  .ar-btn.in .ar-btn__f{animation:none;}
+  .ar-btn.in .ar-btn__p{animation:none;transform:scale(1);opacity:1;}
+  #hud.on{animation:none;}
+  .detected #detectRing{animation-duration:.4s;}
+  .spark{animation:none;opacity:.7;}
+}
+</style>
+</head>
+<body>
+  <!-- LAYER 0/1: real-world camera (real mode) OR synthetic backdrop (demo mode) -->
+  <div id="demoBg"></div>
+  <div id="arContainer"></div>
+  <canvas id="scene"></canvas>
+  <div id="vignette"></div>
+
+  <!-- LAYER 2: UI overlay -->
+  <div id="overlay">
+    <!-- Scanning reticle -->
+    <div id="scan">
+      <div class="reticle" id="reticle">
+        <div id="detectRing"></div>
+        <span class="corner tl"></span><span class="corner tr"></span>
+        <span class="corner bl"></span><span class="corner br"></span>
+        <div class="scanline"></div>
+      </div>
+    </div>
+
+    <!-- Status pill + demo banner -->
+    <div id="status"><span class="dot searching" id="statusDot"></span><span id="statusText">Searching for card…</span></div>
+    <div id="demoBanner">⚠ DEMO MODE · simulated detection — not real tracking</div>
+
+    <!-- Debug toggle + panel -->
+    <button id="debugToggle" aria-label="Toggle debug info">🐞</button>
+    <div id="debugPanel"></div>
+
+    <!-- Floating buttons injected here -->
+    <div id="buttons"></div>
+
+    <!-- Bottom HUD -->
+    <div id="hud">
+      <div class="idchip">
+        <div class="avatar" id="avatar"></div>
+        <div class="who"><b id="hudName">Name</b><span id="hudTitle">Title</span></div>
+      </div>
+      <button id="again" aria-label="Scan again">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 1 3 6.7"/><path d="M3 20v-5h5"/></svg>
+        Scan again
+      </button>
+    </div>
+
+    <!-- Start screen — doubles as the "AR intro": auto-advances into the
+         camera after a short beat, or on a tap anywhere. This IS the
+         continuation of the QR scan, not a separate "please press start"
+         landing page — see the README section on the QR/launch flow. -->
+    <div id="start">
+      <div class="mini-reticle" aria-hidden="true">
+        <span class="corner tl"></span><span class="corner tr"></span>
+        <span class="corner bl"></span><span class="corner br"></span>
+        <div class="scanline"></div>
+        <div class="mark">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="6" width="18" height="12" rx="2"/><path d="M7 15c1.5-3 3-3 4.5 0"/><circle cx="15.5" cy="10.5" r="1.6"/></svg>
+        </div>
+        <div class="intro-sparks"><span class="spark"></span><span class="spark"></span><span class="spark"></span><span class="spark"></span></div>
+      </div>
+      <div class="eyebrow">AR Visiting Card</div>
+      <h1 id="introName">Name</h1>
+      <p class="intro-role" id="introRole">Title</p>
+      <p class="intro-tagline" id="introTagline">Tagline</p>
+      <p class="sub">Point your camera at the card</p>
+      <div class="cta-wrap">
+        <div class="hint">✨ Tap anywhere to continue</div>
+        <button class="btn-textlink" id="demoBtn">No camera? Try demo instead</button>
+      </div>
+    </div>
+
+    <!-- Toast + fatal error -->
+    <div id="toast"></div>
+    <div id="fatal">
+      <div class="box">
+        <h2 id="fatalTitle">Something went wrong</h2>
+        <p id="fatalMsg"></p>
+        <div class="cta-wrap">
+          <button class="btn btn-ghost" id="fatalDemoBtn">Try demo instead</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Real image-target tracking (MindAR) needs ES module "three" resolvable by bare
+       specifier. Demo mode also imports THREE the same way, so both paths share one
+       version. Bump these two together if you ever upgrade. -->
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+      "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+    }
+  }
+  </script>
+  <script type="module">
+  "use strict";
+  /* ============================================================================
+     █  CONFIG  █   ← EDIT EVERYTHING HERE. The rest of the app reads from this.
+     ============================================================================ */
+  import * as THREE from "three";
+
+  // Inline SVG icons (swap the strings for your own / for <img src> URLs later).
+  const ICONS = {
+    whatsapp:'<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12.04 2C6.58 2 2.13 6.45 2.13 11.91c0 1.75.46 3.45 1.32 4.95L2 22l5.25-1.38a9.9 9.9 0 0 0 4.79 1.22h.01c5.46 0 9.9-4.45 9.9-9.91 0-2.65-1.03-5.14-2.9-7.01A9.82 9.82 0 0 0 12.04 2Zm0 18.02h-.01a8.2 8.2 0 0 1-4.19-1.15l-.3-.18-3.11.82.83-3.03-.2-.31a8.22 8.22 0 0 1-1.26-4.38c0-4.54 3.7-8.23 8.24-8.23 2.2 0 4.27.86 5.83 2.42a8.18 8.18 0 0 1 2.41 5.83c0 4.54-3.7 8.24-8.24 8.24Zm4.52-6.16c-.25-.12-1.47-.72-1.69-.81-.23-.08-.39-.12-.56.13-.16.25-.64.8-.79.97-.14.16-.29.18-.54.06-.25-.12-1.05-.39-1.99-1.23-.74-.66-1.23-1.47-1.38-1.72-.14-.25-.01-.38.11-.5.11-.11.25-.29.37-.43.13-.14.17-.25.25-.41.08-.17.04-.31-.02-.43-.06-.12-.56-1.35-.77-1.85-.2-.48-.41-.42-.56-.43l-.48-.01c-.16 0-.43.06-.66.31-.23.25-.86.85-.86 2.07 0 1.22.89 2.4 1.01 2.56.12.16 1.75 2.67 4.23 3.74.59.26 1.05.41 1.41.52.59.19 1.13.16 1.56.1.48-.07 1.47-.6 1.68-1.18.21-.58.21-1.07.14-1.18-.06-.1-.22-.16-.47-.28Z"/></svg>',
+    linkedin:'<svg viewBox="0 0 24 24" fill="currentColor"><path d="M4.98 3.5A2.5 2.5 0 1 0 5 8.5a2.5 2.5 0 0 0-.02-5ZM3 9h4v12H3V9Zm6 0h3.8v1.7h.05c.53-.95 1.83-1.95 3.77-1.95C20.6 8.75 22 11 22 14.2V21h-4v-6c0-1.43-.03-3.27-2-3.27-2 0-2.3 1.56-2.3 3.17V21H9V9Z"/></svg>',
+    instagram:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="5"/><circle cx="12" cy="12" r="4"/><circle cx="17.3" cy="6.7" r="1.1" fill="currentColor" stroke="none"/></svg>',
+    website:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c2.6 2.4 4 5.6 4 9s-1.4 6.6-4 9c-2.6-2.4-4-5.6-4-9s1.4-6.6 4-9Z"/></svg>',
+    email:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m4 7 8 6 8-6"/></svg>',
+    phone:'<svg viewBox="0 0 24 24" fill="currentColor"><path d="M6.6 10.8c1.4 2.8 3.8 5.2 6.6 6.6l2.2-2.2c.3-.3.7-.4 1-.2 1.2.4 2.5.6 3.8.6.6 0 1 .4 1 1V20c0 .6-.4 1-1 1C10.6 21 3 13.4 3 4c0-.6.4-1 1-1h3.5c.6 0 1 .4 1 1 0 1.3.2 2.6.6 3.8.1.4 0 .8-.3 1.1l-2.2 2.1Z"/></svg>'
+  };
+
+  // Real, scannable QR code module data for CARD_QR_URL below — this is
+  // what Google Lens / a phone camera actually reads off the physical
+  // card, NOT decoration. Pre-computed once (via `qrcode` npm, offline —
+  // see tools/) rather than generated at runtime, so the deployed page
+  // needs zero extra runtime dependency to draw it. Regenerate this
+  // (tools/regenerate-qr.mjs) whenever CARD_QR_URL changes.
+  const CARD_QR_URL = "https://googlescan.netlify.app/";
+  const CARD_QR_MATRIX = {
+    size: 29,
+    rows: ["11111110010010011111101111111","10000010000100000000001000001","10111010111010101010101011101","10111010101110001100101011101","10111010111011110111101011101","10000010101101111010101000001","11111110101010101010101111111","00000000111011010000100000000","10111110000000110100001111100","01011001111010011011111110001","01110010000110000100001100000","00001001100000101011110111010","00110110011000001101000001100","10010000100001110101111110001","00100011111111111010000101100","01000100111111010001100100010","00000011111000110111000001100","11110100100100011111001110101","10110010110100000100010100100","10001000000010101011101100010","10110010010110000101111110111","00000000111111110010100011111","11111110000011111011101011100","10000010111111001001100010001","10111010100000100100111110101","10111010111111000001000001100","10111010110000110010011111110","10000010001000010010110101010","11111110110001011101001110100"]
+  };
+
+  const CONFIG = {
+    // ---- WHO the card belongs to (replace freely) --------------------------
+    profile:{
+      name:"Nishikesh Bhagat",
+      title:"Software Engineer",
+      tagline:"AI · Web · 3D · Interactive",
+      phoneText:"+91 97306 50923",
+      emailText:"nishikeshbhagat12@gmail.com",
+      // ---- WHERE each button goes -------------------------------------------
+      links:{
+        whatsapp:"https://wa.me/919730650923",
+        linkedin:"https://www.linkedin.com/in/nishikesh-bhagat-115031235/",
+        instagram:"https://www.instagram.com/always_nishikesh_/",
+        website:"https://nishikeshbhagat.github.io/",
+        email:"mailto:nishikeshbhagat12@gmail.com",
+        phone:"tel:+919730650923"
+      }
+    },
+
+    // ---- SWAPPABLE ASSETS -------------------------------------------------
+    assets:{
+      cardImageUrl:null,        // demo-mode virtual card texture. e.g. "https://.../card.png" (null → generated)
+      // Temporary placeholder model — "Business Man" by Quaternius (CC0,
+      // via poly.pizza), a low-poly character in a suit and tie, ~6.6k
+      // tris, no textures (flat-shaded materials). Re-hosted locally
+      // (assets/character.glb) instead of the original poly.pizza CDN URL,
+      // and trimmed with gltf-transform from 24 baked animation clips
+      // (1.53MB) down to just the 2 this app actually plays — Idle_Neutral
+      // and Wave (1.22MB) — see Character.build()'s GLB branch. Geometry,
+      // materials and the two kept clips are bit-for-bit identical to the
+      // original; only the unused Death/Kick/Punch/Run/Walk/Roll/Gun/
+      // Sword/etc. clips (and the skeleton nodes only THEY referenced)
+      // were removed, plus an unused UV-coordinate accessor now that
+      // there's no texture to sample. To re-derive this from a fresh
+      // export, or to trim a different model, see the strip script noted
+      // in README's Performance notes. Swap for your own GLB whenever
+      // it's ready; set to null to fall back to the built-in procedural
+      // character.
+      characterModelUrl:"./assets/character.glb",
+      profileImage:null,        // e.g. "https://.../me.jpg"   (null → initials avatar)
+      icons:ICONS,              // swap individual keys with URLs or new SVG
+
+      // ---- THE PHYSICAL CARD TARGET — replace these two together -----------
+      // 1. targetImageUrl: the reference photo of the card (what you show the
+      //    tracker so it knows what to look for). Not loaded at runtime by the
+      //    tracker itself — it's here for reference/debug only.
+      // 2. mindTargetUrl: the COMPILED feature database the tracker actually
+      //    reads. After replacing targetImageUrl with a new photo, you MUST
+      //    regenerate this file — see tools/README or tools/compile-target.mjs.
+      targetImageUrl:"./assets/card-target.jpg",
+      mindTargetUrl:"./targets/card.mind",
+      // height/width of the target image. Keep this in sync with the image
+      // above — the compiler script prints the correct value when you
+      // regenerate the .mind file. Only affects where the character sits
+      // relative to the card's top edge; a small mismatch is harmless.
+      targetAspect: 740/1200
+    },
+
+    // ---- LOOK & FEEL ------------------------------------------------------
+    theme:{ accent:"#63d3ff", accent2:"#8a7bff" },
+
+    // ---- TIMING (ms) — CONFIG.timing.scan is DEMO-MODE ONLY. Real detection
+    // has no timer; it fires the instant the tracker actually recognizes the
+    // physical card. -----------------------------------------------------
+    timing:{ scan:2400, detect:750, emerge:1300, buttonStagger:140, wave:1200 },
+
+    // ---- REAL AR TUNING — these are the first knobs to touch once you've
+    // physically tested on a phone and want to adjust scale/height. --------
+    ar:{
+      mindarSrc:"https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-three.prod.js",
+      // Character size, relative to the card's width. Cut hard from an
+      // earlier 0.85 — a full-body human GLB is naturally much "taller"
+      // than a business card is "wide" (a real person vs a real card is
+      // roughly a 19:1 ratio), so even a modest-looking multiplier here
+      // produces a character several card-widths tall once you also
+      // account for characterModelScale below. At 0.5, combined with the
+      // model's own 0.8, total height works out to roughly 0.75
+      // card-widths — comfortably inside the social-button ring instead
+      // of poking up above the top of frame on a real phone scan.
+      characterScale:0.5,
+      // How high (in card-widths) the character's feet sit above the
+      // card's physical surface. 0 = standing exactly ON the surface
+      // (there's no virtual card mesh drawn in real mode to clip through —
+      // the physical card shows through the live camera feed — so 0 is
+      // safe and correct, not just "small"). Raise slightly only if you
+      // want a deliberate hover effect.
+      characterLift:0,
+      effectsScale:0.5,      // beam/particle size, relative to demo mode
+      // One-time calibration knob for whatever GLB is loaded via
+      // CONFIG.assets.characterModelUrl — exported models come in
+      // arbitrary scales, this normalizes it back to roughly the size the
+      // procedural character used to occupy so characterScale/characterLift
+      // above stay meaningful without retuning. Set once per model, not a
+      // per-taste knob like the two above. The "Business Man" model is
+      // ~1.86 units tall at native scale (measured directly, feet at its
+      // own local origin) — 0.8 brings that to ~1.5, which fits inside the
+      // demo camera's frame with headroom; adjust if you swap in a model
+      // with different proportions.
+      characterModelScale:0.8,
+      // The current GLB's own height (feet to head), in its native export
+      // units, BEFORE characterModelScale/characterScale are applied —
+      // measured directly by rendering it, not guessed. Only used to work
+      // out where the social buttons should orbit (see
+      // buttonAnchorFraction below); update this if you swap the model.
+      characterModelRawHeight:1.857,
+      // Where the button ring is centered, as a fraction of the
+      // character's actual on-screen height (0 = at its feet, 1 = at the
+      // top of its head). ~0.55 lands roughly chest-height. This is what
+      // was wrong before: a small fixed offset was used regardless of the
+      // character's actual size, which worked for the old procedural
+      // character (whose origin was near its torso already) but left the
+      // buttons anchored down near the feet for this GLB, whose origin is
+      // at the feet — the top button ended up overlapping the chest
+      // instead of clearing above the head.
+      buttonAnchorFraction:0.55
+    },
+
+    // ---- TRACKING STABILITY — the knobs to touch if the model jitters
+    // (lower *Tau = snappier/twitchier, higher = smoother/laggier) or
+    // flickers on brief tracking blips (raise lostGraceMs). -----------------
+    tracking:{
+      // Exponential smoothing time constants, in seconds — roughly "how long
+      // to close 63% of the gap to the raw tracked value." Position gets the
+      // lightest touch (small positional noise reads as fine detail, not
+      // shake); rotation a bit more (small angular noise reads as visible
+      // wobble); scale the most (abrupt size changes — "pumping" — are the
+      // single most distracting artifact, so it's smoothed hardest).
+      positionTau:0.08,
+      rotationTau:0.14,
+      scaleTau:0.22,
+
+      // Outlier rejection: a raw tracked frame is thrown away (we coast on
+      // the last accepted pose instead) if it implies a position or scale
+      // change bigger than this fraction of the current pose in one frame,
+      // or a rotation faster than this many radians/sec. Catches single bad
+      // CV frames before they can throw the model across the screen.
+      maxRelativePositionJump:0.35,
+      maxRelativeScaleJump:0.35,
+      maxRotationRadPerSec:Math.PI*2.5,
+
+      // How long (ms) to keep showing the last stable pose after MindAR
+      // itself reports the target lost, before actually hiding the content.
+      // Absorbs brief real-world blips (motion blur, a hand crossing the
+      // frame) without the character flickering in and out. This is the
+      // ONE place "how long to tolerate a blip" is decided — it's wall-clock
+      // time (via performance.now()), so it behaves identically on a fast
+      // or a slow device. See mindarMissTolerance below for why that matters.
+      lostGraceMs:350,
+
+      // MindAR's own built-in smoothing (a One-Euro filter applied to the
+      // raw 4x4 matrix) + its found/lost FRAME-COUNT debounce. Left fairly
+      // light/responsive here on purpose — the bulk of smoothing happens in
+      // our own position/quaternion/scale-aware layer above, which is more
+      // accurate than filtering raw matrix elements (that can't preserve
+      // proper rotation math, and can't use different strengths per
+      // channel). Stacking two heavy filters would just add lag.
+      //
+      // mindarMissTolerance is deliberately kept SMALL (not larger, and not
+      // 0/1 either) for a specific reason: MindAR only flags the target as
+      // lost after this many CONSECUTIVE FAILED CV FRAMES — a frame count,
+      // not a duration. On a slow/older device processing CV at, say, 3-5
+      // frames/sec instead of 20-30, a tolerance of 7 (the old value here)
+      // could take 1.5-2+ seconds of real time to trigger — which is
+      // exactly the bug where the character keeps floating on-screen well
+      // after the physical card was removed, and it gets WORSE the slower
+      // the device is. Dropping this to 2 bounds that worst case tightly on
+      // any device, while still filtering a single noisy/blurry frame
+      // (tolerance 0-1 would cause false "lost" flickers on a perfectly
+      // fine connection). lostGraceMs above is what actually controls the
+      // user-visible "how long to tolerate a blip" duration, consistently,
+      // regardless of device speed — this value should stay small.
+      mindarWarmupTolerance:2,
+      mindarMissTolerance:2,
+      mindarFilterMinCF:0.0015,
+      mindarFilterBeta:300
+    },
+
+    // ---- BUTTON SET (order = reveal order & orbit slot) -------------------
+    buttons:[
+      { key:"whatsapp",  label:"WhatsApp",  color:"#25D366" },
+      { key:"linkedin",  label:"LinkedIn",  color:"#4aa3ff" },
+      { key:"instagram", label:"Instagram", color:"#e1568f" },
+      { key:"website",   label:"Website",   color:"#63d3ff" },
+      { key:"email",     label:"Email",     color:"#ff8a6b" },
+      { key:"phone",     label:"Call",      color:"#4ade80" }
+    ]
+  };
+
+  /* ============================================================================
+     █  UTILITIES  █
+     ============================================================================ */
+  const $ = (s)=>document.querySelector(s);
+  const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
+  const lerp=(a,b,t)=>a+(b-a)*t;
+  const easeOutCubic=t=>1-Math.pow(1-t,3);
+  const easeOutBack=t=>{const c=1.7;return 1+(c+1)*Math.pow(t-1,3)+c*Math.pow(t-1,2);};
+  const REDUCED = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+  /* ============================================================================
+     █  DEVICE TIER  █  A one-time, best-effort capability estimate, used
+     ONLY to pick starting render QUALITY (pixel ratio cap, particle
+     density) — never anything about tracking state. CONFIG.tracking
+     (smoothing, grace periods, MindAR tolerances) is completely
+     independent of this and behaves identically on every tier; that
+     separation is deliberate, not an oversight — a slow device must still
+     correctly tell "card found" from "card lost", it should just draw
+     fewer particles while doing it. The runtime FPS-based _adaptQuality()
+     in Stage is a second, ongoing safety net that can still step quality
+     down further than this initial guess if a device underperforms its
+     reported specs (thermal throttling, background load, etc.) — the two
+     are complementary, not redundant.
+     ============================================================================ */
+  const DeviceTier = {
+    tier:"high", // "high" | "medium" | "low", set once by detect()
+
+    detect(){
+      if(REDUCED){ this.tier="low"; return; } // accessibility preference always wins, no guessing needed
+
+      let score=0;
+      const cores=navigator.hardwareConcurrency||4;
+      score += cores>=6?2:cores>=4?1:0;
+
+      // deviceMemory (GB) is Chrome/Android-only and intentionally coarse
+      // (browser rounds it) — absent on Safari/Firefox, so absence is
+      // never penalized, only used as a positive/negative nudge when present.
+      if(typeof navigator.deviceMemory==="number"){
+        score += navigator.deviceMemory>=6?2:navigator.deviceMemory>=4?1:navigator.deviceMemory<2?-2:0;
+      }
+
+      const dpr=window.devicePixelRatio||1;
+      if(dpr>2.5) score-=1; // very high-density screens cost more GPU work per frame at native res
+
+      const isMobile=/Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+      if(!isMobile) score+=1;
+
+      // WEBGL_debug_renderer_info is best-effort only — modern browsers
+      // increasingly return a generic string (privacy fingerprinting
+      // mitigation), so this is a small nudge when a real name IS exposed,
+      // never something the rest of the score depends on.
+      try{
+        const c=document.createElement("canvas");
+        const gl=c.getContext("webgl")||c.getContext("experimental-webgl");
+        const ext=gl&&gl.getExtension("WEBGL_debug_renderer_info");
+        const renderer=ext&&gl.getParameter(ext.UNMASKED_RENDERER_WEBGL);
+        if(renderer && /Mali-4|PowerVR SGX|Adreno \(TM\) [23]0[0-9]/i.test(renderer)) score-=2;
+      }catch(e){}
+
+      this.tier = score>=3?"high" : score>=0?"medium" : "low";
+      Debug.set("deviceTier",`${this.tier} (score ${score}, cores=${cores}, mem=${navigator.deviceMemory??"?"}, dpr=${dpr})`);
+
+      // CSS-side quality knob: `backdrop-filter` (used all over the glass
+      // UI chrome) forces the compositor to re-sample everything behind
+      // each blurred element every time that background changes — here,
+      // that's a live camera feed AND a WebGL canvas, updating every frame,
+      // under a dozen simultaneously-blurred elements (buttons, status
+      // pill, HUD chip, debug panel...). That's real, ongoing GPU cost this
+      // module never otherwise touches (it only tunes Three.js). Only
+      // strip it on low tier, where a flat translucent panel is a better
+      // trade than the blur; medium/high keep the full glass look.
+      document.documentElement.classList.toggle("perf-low", this.tier==="low");
+    },
+
+    pixelRatioCap(){ return this.tier==="high"?2:this.tier==="medium"?1.5:1; },
+    particleMultiplier(){ return this.tier==="high"?1:this.tier==="medium"?0.6:0.35; }
+  };
+
+  // Managed timers so reset() can cancel everything cleanly (no dupes / leaks).
+  const _timers=new Set();
+  function later(fn,ms){const id=setTimeout(()=>{_timers.delete(id);fn();},ms);_timers.add(id);return id;}
+  function clearTimers(){_timers.forEach(clearTimeout);_timers.clear();}
+
+  // Tiny tween engine for one-shot animations, advanced from the render loop.
+  const _tweens=[];
+  function tween(o){const t=Object.assign({e:0,delay:0,dur:1,ease:easeOutCubic},o);_tweens.push(t);return t;}
+  function updateTweens(dt){
+    for(let i=_tweens.length-1;i>=0;i--){
+      const t=_tweens[i];
+      if(t.delay>0){t.delay-=dt;if(t.delay>0)continue;}
+      t.e+=dt;const p=Math.min(t.e/t.dur,1);
+      if(t.onUpdate)t.onUpdate(t.ease(p),p);
+      if(p>=1){if(t.onComplete)t.onComplete();_tweens.splice(i,1);}
+    }
+  }
+  function clearTweens(){_tweens.length=0;}
+
+  function toast(msg){const el=$("#toast");el.textContent=msg;el.classList.add("on");
+    later(()=>el.classList.remove("on"),2600);}
+  function fatal(title,msg,{offerDemo=false}={}){
+    $("#fatalTitle").textContent=title;$("#fatalMsg").textContent=msg;
+    $("#fatal").classList.add("on");
+    $("#fatalDemoBtn").classList.toggle("on",offerDemo);
+  }
+
+  /* ============================================================================
+     █  DEBUG PANEL  █  CAMERA / TRACKER / TARGET / STATE / FPS
+     ============================================================================ */
+  const Debug = {
+    on:false,_vals:{},_frames:0,_fpsT:0,
+    toggle(){ this.on=!this.on; $("#debugPanel").classList.toggle("on",this.on); this._render(); },
+    set(k,v){ this._vals[k]=v; this._render(); },
+    tickFPS(dt){
+      this._frames++; this._fpsT+=dt;
+      if(this._fpsT>=0.5){ this.set("fps",Math.round(this._frames/this._fpsT)); this._frames=0; this._fpsT=0; }
+    },
+    _render(){
+      if(!this.on)return;
+      const v=this._vals;
+      $("#debugPanel").textContent =
+`CAMERA: ${v.camera||"-"}
+TRACKER: ${v.tracker||"-"}
+TARGET: ${v.target||"-"}
+STATE: ${v.state||"-"}
+FPS: ${v.fps??"-"}
+DEVICE TIER: ${v.deviceTier||"-"}
+QUALITY: ${v.quality||"full"}`;
+    }
+  };
+
+  /* ============================================================================
+     █  SCENE EFFECTS (shared)  █
+     Beam / dust / burst / lights builders used by BOTH demo and real mode.
+     `scale` controls physical size, `originY` controls where (in local space)
+     the card's plane sits — demo mode has its virtual card at y=-1.02; real
+     mode's anchor origin (0,0,0) IS the tracked card's center, so originY=0.
+     ============================================================================ */
+  // pointLight {distance,decay}: demo mode's coordinate space is a handful of
+  // units wide, so a physically-falling-off point light (distance:6,decay:2)
+  // looks right. Real mode's anchor content is scaled by the tracked image's
+  // actual pixel dimensions (MindAR's own convention — hundreds to low
+  // thousands of "units"), so a fixed small distance cutoff would make the
+  // light invisible; distance:0,decay:0 makes it a constant-intensity fill
+  // light instead, which stays visible regardless of that scale factor.
+  function buildLights(target, theme, pointLight={distance:6,decay:2}){
+    const ambient=new THREE.AmbientLight(0x8fb2ff,0.55);
+    const key=new THREE.DirectionalLight(0xffffff,0.9); key.position.set(2,4,3);
+    const rim=new THREE.DirectionalLight(new THREE.Color(theme.accent2),0.6); rim.position.set(-3,1,-2);
+    const cardLight=new THREE.PointLight(new THREE.Color(theme.accent),0,pointLight.distance,pointLight.decay);
+    target.add(ambient,key,rim,cardLight);
+    return { cardLight };
+  }
+
+  function buildBeam(theme,scale,heightOverride){
+    const h=heightOverride??2.6*scale;
+    const geo=new THREE.CylinderGeometry(0.06*scale,0.62*scale,h,28,1,true);
+    const mat=new THREE.MeshBasicMaterial({color:new THREE.Color(theme.accent),transparent:true,opacity:0,
+      blending:THREE.AdditiveBlending,depthWrite:false,side:THREE.DoubleSide});
+    const beam=new THREE.Mesh(geo,mat);
+    beam.scale.y=0.001;
+    return beam;
+  }
+
+  function buildDust(count,scale){
+    const n=count,pos=new Float32Array(n*3),spd=new Float32Array(n);
+    for(let i=0;i<n;i++){pos[i*3]=(Math.random()-.5)*6*scale;pos[i*3+1]=(Math.random()-.5)*4.4*scale;pos[i*3+2]=(Math.random()-.5)*3.2*scale;spd[i]=(.02+Math.random()*.06)*scale;}
+    const geo=new THREE.BufferGeometry();geo.setAttribute("position",new THREE.BufferAttribute(pos,3));
+    const mat=new THREE.PointsMaterial({color:0xbcd6ff,size:.028*Math.max(scale,.6),transparent:true,opacity:.5,depthWrite:false,blending:THREE.AdditiveBlending,sizeAttenuation:true});
+    const dust=new THREE.Points(geo,mat);dust.userData.spd=spd;dust.userData.span=2.4*scale;
+    return dust;
+  }
+
+  function buildBurst(count,theme,scale){
+    const n=count,pos=new Float32Array(n*3),vel=new Float32Array(n*3);
+    const geo=new THREE.BufferGeometry();geo.setAttribute("position",new THREE.BufferAttribute(pos,3));
+    const mat=new THREE.PointsMaterial({color:new THREE.Color(theme.accent),size:.06*Math.max(scale,.6),transparent:true,opacity:0,depthWrite:false,blending:THREE.AdditiveBlending,sizeAttenuation:true});
+    const burst=new THREE.Points(geo,mat);burst.userData.vel=vel;burst.userData.n=n;
+    return burst;
+  }
+
+  // Decorative "holographic data panel" — purely atmospheric (no real
+  // content, per design decision), drawn once to a canvas and reused as a
+  // texture rather than built from live DOM/text, so it costs nothing
+  // per-frame beyond a single flat-shaded plane draw.
+  function dataPanelTexture(theme){
+    const w=512,h=768,c=document.createElement("canvas");c.width=w;c.height=h;
+    const g=c.getContext("2d");
+    const accent=theme.accent,accent2=theme.accent2;
+    // panel background: soft vertical gradient, mostly transparent so it
+    // reads as glass/hologram rather than a solid card
+    const bg=g.createLinearGradient(0,0,0,h);
+    bg.addColorStop(0,"rgba(20,30,55,.55)");bg.addColorStop(1,"rgba(10,16,30,.35)");
+    g.fillStyle=bg;g.fillRect(0,0,w,h);
+    // thin border frame
+    g.strokeStyle="rgba(150,190,255,.35)";g.lineWidth=3;g.strokeRect(6,6,w-12,h-12);
+    // faint grid
+    g.strokeStyle="rgba(140,180,255,.08)";g.lineWidth=1;
+    for(let x=40;x<w;x+=40){g.beginPath();g.moveTo(x,0);g.lineTo(x,h);g.stroke();}
+    for(let y=40;y<h;y+=40){g.beginPath();g.moveTo(0,y);g.lineTo(w,y);g.stroke();}
+    // abstract donut/gauge chart, top area
+    g.save();g.translate(w*0.68,h*0.18);
+    g.strokeStyle=accent;g.lineWidth=14;g.lineCap="round";
+    g.beginPath();g.arc(0,0,70,-Math.PI*0.5,Math.PI*0.65);g.stroke();
+    g.strokeStyle="rgba(150,180,255,.25)";g.beginPath();g.arc(0,0,70,Math.PI*0.65,Math.PI*1.5);g.stroke();
+    g.restore();
+    // small accent ring, upper-left
+    g.strokeStyle=accent2;g.lineWidth=6;g.beginPath();g.arc(w*0.22,h*0.14,34,0,Math.PI*1.4);g.stroke();
+    // abstract bar chart, mid area
+    const barsX=w*0.14,barsY=h*0.52,barW=26,gap=14;
+    const heights=[46,78,32,95,60,70];
+    g.fillStyle="rgba(150,190,255,.5)";
+    heights.forEach((bh,i)=>{
+      const grad=g.createLinearGradient(0,barsY-bh,0,barsY);
+      grad.addColorStop(0,accent);grad.addColorStop(1,"rgba(99,211,255,.15)");
+      g.fillStyle=grad;
+      g.fillRect(barsX+i*(barW+gap),barsY-bh,barW,bh);
+    });
+    // thin connecting "data line" beneath the bars
+    g.strokeStyle=accent2;g.lineWidth=2.5;g.beginPath();
+    heights.forEach((bh,i)=>{
+      const x=barsX+i*(barW+gap)+barW/2,y=barsY-bh-14;
+      if(i===0)g.moveTo(x,y);else g.lineTo(x,y);
+    });
+    g.stroke();
+    heights.forEach((bh,i)=>{
+      const x=barsX+i*(barW+gap)+barW/2,y=barsY-bh-14;
+      g.fillStyle=accent2;g.beginPath();g.arc(x,y,4,0,Math.PI*2);g.fill();
+    });
+    // scattered glow dots, lower area — reads as ambient telemetry
+    let seed=11;
+    for(let i=0;i<26;i++){
+      seed=(seed*1103515245+12345)&0x7fffffff;
+      const x=(seed%1000)/1000*w, y2=h*0.62+((seed>>8)%1000)/1000*h*0.32;
+      g.fillStyle=i%3===0?accent:"rgba(150,190,255,.4)";
+      g.beginPath();g.arc(x,y2,i%5===0?3:1.6,0,Math.PI*2);g.fill();
+    }
+    // thin horizontal "scanline" accents near the bottom
+    g.strokeStyle="rgba(150,190,255,.2)";g.lineWidth=1.5;
+    [h*0.86,h*0.90,h*0.94].forEach(y=>{g.beginPath();g.moveTo(30,y);g.lineTo(w-30,y);g.stroke();});
+    const tex=new THREE.CanvasTexture(c);tex.anisotropy=4;return tex;
+  }
+
+  function buildDataPanel(theme,width,height){
+    const geo=new THREE.PlaneGeometry(width,height);
+    const mat=new THREE.MeshBasicMaterial({map:dataPanelTexture(theme),transparent:true,opacity:0,
+      side:THREE.DoubleSide,depthWrite:false,blending:THREE.NormalBlending});
+    const panel=new THREE.Mesh(geo,mat);
+    panel.userData.baseOpacity=0.88;
+    return panel;
+  }
+
+  /* ============================================================================
+     █  POSE SMOOTHER  █  Stabilizes the raw tracked transform.
+     MindAR hands us a fresh 4x4 matrix every processed frame via
+     anchorGroup.matrix — applying that directly to visible content is what
+     causes jitter/shake, since even light CV noise shows up as visible
+     position/rotation/scale flicker frame to frame.
+     This decomposes the raw matrix into position/quaternion/scale, rejects
+     single-frame outliers (a spike thrown out entirely, coasting on the last
+     good pose instead of snapping toward garbage), then exponentially
+     smooths each channel independently (see CONFIG.tracking) and writes the
+     result into a SEPARATE group (`outGroup`) that the actual AR content is
+     parented to — the raw anchor itself is never rendered directly.
+     Framerate-independent: smoothing strength is expressed as a time
+     constant and converted to a per-frame blend factor using `dt`, so it
+     looks the same at 30fps or 60fps.
+     ============================================================================ */
+  const PoseSmoother = {
+    _rawPos:null,_rawQuat:null,_rawScale:null,
+    _pos:null,_quat:null,_scale:null,
+    _lastGoodPos:null,_lastGoodQuat:null,_lastGoodScaleLen:1,
+    _initialized:false,_visible:false,_lostSinceMs:0,_rejectSinceMs:0,
+
+    _ensureTemps(){
+      if(this._rawPos)return;
+      this._rawPos=new THREE.Vector3();this._rawQuat=new THREE.Quaternion();this._rawScale=new THREE.Vector3();
+      this._pos=new THREE.Vector3();this._quat=new THREE.Quaternion();this._scale=new THREE.Vector3(1,1,1);
+      this._lastGoodPos=new THREE.Vector3();this._lastGoodQuat=new THREE.Quaternion();
+    },
+
+    reset(){
+      this._initialized=false;this._visible=false;this._lostSinceMs=0;this._rejectSinceMs=0;
+    },
+
+    // Reads anchorGroup's raw tracked matrix (if MindAR currently considers
+    // it visible) and writes a smoothed, outlier-rejected result into
+    // outGroup's matrix. Returns {rawVisible, smoothedVisible} so the caller
+    // can react to state *transitions* (edge-triggered), not raw per-frame noise.
+    update(anchorGroup,outGroup,dt,nowMs){
+      this._ensureTemps();
+      const cfg=CONFIG.tracking;
+      const rawVisible=anchorGroup.visible;
+      const wasVisible=this._visible;
+
+      if(rawVisible){
+        anchorGroup.matrix.decompose(this._rawPos,this._rawQuat,this._rawScale);
+        const resuming=!this._initialized || this._lostSinceMs!==0;
+
+        let accept=true;
+        if(!resuming){
+          const posMag=Math.max(this._lastGoodPos.length(),1e-6);
+          const posJump=this._rawPos.distanceTo(this._lastGoodPos)/posMag;
+          const scaleLen=this._rawScale.length();
+          const scaleJump=Math.abs(scaleLen-this._lastGoodScaleLen)/Math.max(this._lastGoodScaleLen,1e-6);
+          const angRad=this._lastGoodQuat.angleTo(this._rawQuat);
+          const angRateOk = dt<=0 || (angRad/dt)<=cfg.maxRotationRadPerSec;
+          accept = posJump<=cfg.maxRelativePositionJump && scaleJump<=cfg.maxRelativeScaleJump && angRateOk;
+        }
+
+        if(accept){
+          this._lastGoodPos.copy(this._rawPos);this._lastGoodQuat.copy(this._rawQuat);this._lastGoodScaleLen=this._rawScale.length();
+          this._lostSinceMs=0;this._rejectSinceMs=0;this._visible=true;this._initialized=true;
+          if(resuming){
+            // snap straight to the raw pose on (re)acquisition — no smoothing
+            // lag when the card is first found or comes back after a real loss
+            this._pos.copy(this._rawPos);this._quat.copy(this._rawQuat);this._scale.copy(this._rawScale);
+          }else{
+            const ap=1-Math.exp(-dt/cfg.positionTau);
+            const ar=1-Math.exp(-dt/cfg.rotationTau);
+            const as_=1-Math.exp(-dt/cfg.scaleTau);
+            this._pos.lerp(this._rawPos,ap);
+            this._quat.slerp(this._rawQuat,ar);
+            this._scale.lerp(this._rawScale,as_);
+          }
+        }else{
+          // Rejected outlier: MindAR still thinks it sees SOMETHING (raw
+          // visible=true), but the pose doesn't resemble the card anymore —
+          // this happens when tracking degrades to weak/false-positive
+          // matches instead of cleanly reporting loss (more common on
+          // weaker devices/cameras). Coasting on the last good pose is fine
+          // briefly, but NOT indefinitely — apply the same wall-clock grace
+          // period used for genuine loss, so degraded-but-technically-still
+          // "visible" tracking can't leave stale content on screen forever.
+          if(this._rejectSinceMs===0)this._rejectSinceMs=nowMs;
+          if(nowMs-this._rejectSinceMs>cfg.lostGraceMs) this._visible=false;
+        }
+      }else if(this._initialized){
+        this._rejectSinceMs=0;
+        if(this._lostSinceMs===0)this._lostSinceMs=nowMs;
+        if(nowMs-this._lostSinceMs>cfg.lostGraceMs) this._visible=false;
+        // within grace period: keep coasting on the last smoothed pose
+      }
+
+      outGroup.visible=this._visible;
+      if(this._visible) outGroup.matrix.compose(this._pos,this._quat,this._scale);
+
+      return { rawVisible, smoothedVisible:this._visible, becameVisible: this._visible&&!wasVisible, becameHidden: !this._visible&&wasVisible };
+    }
+  };
+
+  /* ============================================================================
+     █  STAGE  █  Three.js scene owner. Works in two modes:
+       - demo: owns its own renderer/scene/camera (drawn on #scene canvas),
+               builds a virtual card mesh, driven by a simulated timer.
+       - real: reuses MindAR's renderer/scene/camera, builds content straight
+               into the tracked anchor group (no virtual card — the physical
+               card is what's visible through the live camera feed).
+     Both modes share one render loop and the same Character/UI modules.
+     ============================================================================ */
+  const Stage = {
+    mode:null,renderer:null,scene:null,camera:null,root:null,
+    trackAnchor:null,       // real mode only: MindAR's raw tracked anchor group (never rendered directly)
+    card:null,beam:null,dust:null,burst:null,cardLight:null,panel:null,
+    _burstLife:0,_raf:null,_last:0,_clock:0,_px:0,_py:0,_tpx:0,_tpy:0,_loopRunning:false,
+    _smoothedWasVisible:false,
+    _lowFpsStreak:0,_qualityStep:0,_qFrames:0,_qFpsT:0,
+    _projVec:null,
+
+    initDemo(){
+      this.mode="demo";
+      const canvas=$("#scene");
+      try{
+        // Antialiasing (MSAA) is one of the pricier renderer flags on
+        // mobile GPUs, especially stacked with a pixel ratio above 1 —
+        // skip it on low-tier devices, where the edge-smoothing is the
+        // least noticeable saving available (real mode reuses MindAR's own
+        // renderer, which doesn't expose this knob, so this only applies
+        // to demo mode).
+        this.renderer=new THREE.WebGLRenderer({canvas,alpha:true,antialias:DeviceTier.tier!=="low",powerPreference:"high-performance"});
+      }catch(e){ return false; }
+      this.renderer.setPixelRatio(Math.min(window.devicePixelRatio||1,DeviceTier.pixelRatioCap()));
+      this.renderer.setSize(window.innerWidth,window.innerHeight);
+
+      this.scene=new THREE.Scene();
+      this.camera=new THREE.PerspectiveCamera(50,window.innerWidth/window.innerHeight,0.1,100);
+      this.camera.position.set(0,0.45,4.7); this.camera.lookAt(0,-0.15,0);
+
+      this.root=new THREE.Group(); this.scene.add(this.root);
+
+      const {cardLight}=buildLights(this.scene,CONFIG.theme);
+      cardLight.position.set(0,-1.1,0.6);
+      this.cardLight=cardLight;
+
+      const pm=DeviceTier.particleMultiplier();
+      this._buildCard();
+      this.beam=buildBeam(CONFIG.theme,1); this.beam.position.set(0,-0.595,0.15); this.root.add(this.beam);
+      this.dust=buildDust(Math.round((REDUCED?160:520)*pm),1); this.root.add(this.dust);
+      this.burst=buildBurst(Math.round((REDUCED?60:180)*pm),CONFIG.theme,1); this.burst.position.set(0,0,0); this.root.add(this.burst);
+
+      // Decorative holographic panel, floating beside/behind the
+      // character — sized and placed relative to the character's own
+      // height (same computed-not-guessed approach as everything else),
+      // so it stays proportioned if characterScale ever changes. Purely
+      // atmospheric (see buildDataPanel's own comment) — skipped entirely
+      // on low-tier devices to save its ~1.5MB canvas-texture VRAM
+      // footprint and one draw call, rather than rendering it smaller/
+      // cheaper; every OTHER visual (character, buttons, card, QR) is
+      // left untouched at every tier.
+      if(DeviceTier.tier!=="low"){
+        const demoCharHeight=1*CONFIG.ar.characterModelScale*CONFIG.ar.characterModelRawHeight;
+        this.panel=buildDataPanel(CONFIG.theme,demoCharHeight*0.9,demoCharHeight*1.3);
+        this.panel.position.set(demoCharHeight*0.75,-0.595+demoCharHeight*0.85,-0.15);
+        this.panel.userData.baseY=this.panel.position.y;
+        this.panel.rotation.y=-0.35;
+        this.root.add(this.panel);
+      }
+
+      Character.build(this.root,{scale:1,baseY:-0.595,startY:-0.9,startZ:0.15});
+
+      window.addEventListener("resize",()=>this._resize(),{passive:true});
+      if(!REDUCED) window.addEventListener("pointermove",(e)=>{
+        this._tpx=(e.clientX/window.innerWidth-0.5); this._tpy=(e.clientY/window.innerHeight-0.5);
+      },{passive:true});
+
+      this._startLoop();
+      return true;
+    },
+
+    // Reuses MindAR's own renderer/scene/camera. Content is NOT parented
+    // directly to MindAR's raw tracked anchor (anchorGroup) — that gets a
+    // fresh, noisy matrix every CV frame. Instead it's parented to `root`,
+    // our own group whose transform PoseSmoother writes every render frame
+    // after decomposing + smoothing + outlier-rejecting anchorGroup's raw
+    // matrix. anchorGroup itself is kept only as the smoothing input.
+    attachReal(mindar, anchorGroup){
+      this.mode="real";
+      this.renderer=mindar.renderer; this.scene=mindar.scene; this.camera=mindar.camera;
+      // MindARThree sets pixel ratio to the device's raw devicePixelRatio,
+      // uncapped — fine on a flagship, expensive on a high-DPI budget phone.
+      // Re-cap it using the same tier-based ceiling demo mode uses (still
+      // never below what MindAR itself would have chosen on a low-DPI screen).
+      this.renderer.setPixelRatio(Math.min(window.devicePixelRatio||1,DeviceTier.pixelRatioCap()));
+      this.trackAnchor=anchorGroup;
+      this.root=new THREE.Group(); this.root.matrixAutoUpdate=false; this.root.visible=false;
+      this.scene.add(this.root);
+      PoseSmoother.reset(); this._smoothedWasVisible=false;
+
+      // MindAR's tracked anchor frame lies FLAT against the physical card:
+      // local X/Y sit IN the card's printed surface (Y points toward the
+      // card's own top edge — still flat on the table), local Z is the
+      // surface normal (points away from the card, toward the camera).
+      // Character/beam/particles below are authored the normal way —
+      // local +Y = "standing height, up off the ground" — so parenting
+      // them straight to the anchor makes them lie flat along the card's
+      // surface instead of standing up off it (a hard-to-notice bug until
+      // you actually look at the card from the side).
+      // `standRoot` fixes this with one fixed +90° rotation about X: a
+      // point at the character's local (0, h, 0) — "h units up" — ends up
+      // at the anchor's (0, 0, h) — "h units off the card's surface" —
+      // i.e. actually standing up. Everything downstream keeps using
+      // ordinary Y-up coordinates; only this one wrapper needs to know
+      // about the card's flat tracking frame.
+      const standRoot=new THREE.Group();
+      standRoot.rotation.x=Math.PI/2;
+      this.root.add(standRoot);
+      this.effectsRoot=standRoot;
+
+      // The character's ACTUAL rendered height (feet at local 0, head at
+      // charHeight), computed from real measured values — not guessed:
+      // characterScale (per-taste size) × characterModelScale (per-model
+      // calibration) × characterModelRawHeight (this GLB's own measured
+      // height). Beam/light are derived from this instead of an
+      // independently-tuned number, so they stay correctly proportioned
+      // to the character no matter how characterScale/characterLift get
+      // tuned later — this is what was actually wrong before: beam height
+      // and position were fractions of characterLift (the tiny floating
+      // gap), which is unrelated to how tall the character actually is,
+      // so the beam extended well past the character into empty space.
+      const charHeight=CONFIG.ar.characterScale*CONFIG.ar.characterModelScale*CONFIG.ar.characterModelRawHeight;
+      const scale=CONFIG.ar.effectsScale;
+      const {cardLight}=buildLights(standRoot,CONFIG.theme,{distance:0,decay:0}); // lights ride WITH the card
+      cardLight.position.set(0,charHeight*0.5,0.6*scale); // mid-body fill light
+      this.cardLight=cardLight;
+
+      // Beam spans exactly from the card surface (y=0) to just above the
+      // character's head (charHeight*1.15) — its narrow top sits right
+      // above the character, its wide base sits right at the card, no gap
+      // at either end regardless of how tall/short the character is.
+      const beamHeight=charHeight*1.15;
+      this.beam=buildBeam(CONFIG.theme,scale,beamHeight); this.beam.position.set(0,beamHeight/2,0.15*scale); standRoot.add(this.beam);
+      const pm=DeviceTier.particleMultiplier();
+      this.dust=buildDust(Math.round((REDUCED?100:220)*pm),scale); standRoot.add(this.dust);
+      this.burst=buildBurst(Math.round((REDUCED?40:90)*pm),CONFIG.theme,scale); this.burst.position.set(0,0.12*scale,0); standRoot.add(this.burst);
+
+      // Decorative holographic panel, same sizing principle as above —
+      // proportioned to the character's actual height, not a guess.
+      // Skipped on low-tier devices — see the matching comment in initDemo().
+      if(DeviceTier.tier!=="low"){
+        this.panel=buildDataPanel(CONFIG.theme,charHeight*0.9,charHeight*1.3);
+        this.panel.position.set(charHeight*0.75,charHeight*0.85,0.03-0.3);
+        this.panel.userData.baseY=this.panel.position.y;
+        this.panel.rotation.y=-0.35;
+        standRoot.add(this.panel);
+      }
+
+      Character.build(standRoot,{
+        scale:CONFIG.ar.characterScale,
+        baseY:CONFIG.ar.characterLift,  // feet sit right on the card's surface
+        startY:CONFIG.ar.characterLift-0.03, // starts a hair below the surface, rises up during emerge
+        startZ:0.03
+      });
+
+      this._startLoop();
+    },
+
+    _cardTexture(){
+      const w=1024,h=632,c=document.createElement("canvas");c.width=w;c.height=h;
+      const g=c.getContext("2d");const R=54,pad=6;
+      g.clearRect(0,0,w,h);
+      const grd=g.createLinearGradient(0,0,w,h);
+      grd.addColorStop(0,"#0d1526");grd.addColorStop(.55,"#0a1120");grd.addColorStop(1,"#070c17");
+      const rr=(x,y,ww,hh,r)=>{g.beginPath();g.moveTo(x+r,y);g.arcTo(x+ww,y,x+ww,y+hh,r);g.arcTo(x+ww,y+hh,x,y+hh,r);g.arcTo(x,y+hh,x,y,r);g.arcTo(x,y,x+ww,y,r);g.closePath();};
+      rr(pad,pad,w-pad*2,h-pad*2,R);g.fillStyle=grd;g.fill();
+      g.lineWidth=3;g.strokeStyle="rgba(120,170,230,.28)";g.stroke();
+      const ac=CONFIG.theme.accent;
+      g.save();g.beginPath();g.rect(pad,pad,14,h-pad*2);g.clip();
+      const ag=g.createLinearGradient(0,0,0,h);ag.addColorStop(0,ac);ag.addColorStop(1,CONFIG.theme.accent2);
+      g.fillStyle=ag;g.fillRect(pad,pad,14,h-pad*2);g.restore();
+      g.fillStyle=ac;g.strokeStyle=ac;g.lineWidth=6;g.globalAlpha=.95;
+      g.beginPath();g.moveTo(90,96);g.lineTo(150,150);g.lineTo(90,204);g.stroke();
+      g.beginPath();g.moveTo(150,96);g.lineTo(150,204);g.stroke();g.globalAlpha=1;
+      g.fillStyle="#f2f7ff";g.font="700 74px ui-sans-serif,Segoe UI,Roboto,Arial";g.fillText(CONFIG.profile.name,90,320);
+      g.fillStyle=ac;g.font="600 40px ui-sans-serif,Segoe UI,Roboto,Arial";g.fillText(CONFIG.profile.title,92,380);
+      g.fillStyle="rgba(190,205,230,.72)";g.font="400 32px ui-sans-serif,Segoe UI,Roboto,Arial";g.fillText(CONFIG.profile.tagline,92,436);
+      g.fillStyle="rgba(210,222,245,.9)";g.font="400 34px ui-sans-serif,Segoe UI,Roboto,Arial";
+      g.fillText(CONFIG.profile.phoneText,92,528);g.fillText(CONFIG.profile.emailText,92,576);
+      // Real QR (same module data baked into assets/card-target.jpg) —
+      // scannable straight off the demo-mode virtual card too.
+      const qSize=208,qx=w-236,qy=h-236;
+      g.fillStyle="rgba(230,240,255,.92)";g.fillRect(qx-14,qy-14,qSize+28,qSize+28);
+      g.fillStyle="#0a1120";
+      const mSize=CARD_QR_MATRIX.size,cellPx=qSize/mSize;
+      for(let y=0;y<mSize;y++){const row=CARD_QR_MATRIX.rows[y];
+        for(let x=0;x<mSize;x++){if(row[x]==="1")g.fillRect(qx+x*cellPx,qy+y*cellPx,cellPx,cellPx);}}
+      const tex=new THREE.CanvasTexture(c);tex.anisotropy=4;return tex;
+    },
+
+    _applyCardMaterial(){
+      const finish=(tex)=>{ this.card.material.map=tex; this.card.material.needsUpdate=true; };
+      if(CONFIG.assets.cardImageUrl){
+        const l=new THREE.TextureLoader();
+        l.load(CONFIG.assets.cardImageUrl, finish, undefined, ()=>{ finish(this._cardTexture()); toast("Card image failed to load — using placeholder."); });
+      }else finish(this._cardTexture());
+    },
+
+    _buildCard(){ // demo-mode only: a virtual stand-in for the physical card
+      const geo=new THREE.PlaneGeometry(2.0,1.235);
+      const mat=new THREE.MeshStandardMaterial({transparent:true,alphaTest:.5,roughness:.65,metalness:.15,side:THREE.DoubleSide});
+      this.card=new THREE.Mesh(geo,mat);
+      this.card.position.set(0,-1.02,0.05); this.card.rotation.x=-1.12;
+      this.root.add(this.card);
+      this._applyCardMaterial();
+    },
+
+    fireDetection(){
+      tween({dur:.5,onUpdate:(v)=>{this.cardLight.intensity=v*2.4;}});
+      tween({dur:CONFIG.timing.emerge/1000+.4,ease:easeOutCubic,onUpdate:(v)=>{
+        this.beam.scale.y=Math.max(.001,v);this.beam.material.opacity=(v<.6?v:1-(v-.6)/.4*0.55)*0.5;}});
+      if(this.panel) tween({dur:CONFIG.timing.emerge/1000+.6,delay:.25,ease:easeOutCubic,
+        onUpdate:(v)=>{this.panel.material.opacity=v*this.panel.userData.baseOpacity;}});
+      const p=this.burst.geometry.attributes.position.array,vel=this.burst.userData.vel,n=this.burst.userData.n;
+      const s=this.mode==="real"?CONFIG.ar.effectsScale:1;
+      for(let i=0;i<n;i++){const a=Math.random()*Math.PI*2,r=Math.random()*0.3*s;
+        p[i*3]=Math.cos(a)*r;p[i*3+1]=0;p[i*3+2]=Math.sin(a)*r+0.1*s;
+        vel[i*3]=Math.cos(a)*(.4+Math.random()*.6)*s;vel[i*3+1]=(1.4+Math.random()*1.6)*s;vel[i*3+2]=Math.sin(a)*(.4+Math.random()*.6)*s;}
+      this.burst.geometry.attributes.position.needsUpdate=true;this.burst.material.opacity=.9;this._burstLife=1;
+    },
+
+    resetVisual(){
+      if(!this.beam)return;
+      this.beam.scale.y=0.001;this.beam.material.opacity=0;this.cardLight.intensity=0;
+      this.burst.material.opacity=0;this._burstLife=0;
+      if(this.panel)this.panel.material.opacity=0;
+    },
+
+    // projects a world point to screen pixels (used to place floating buttons)
+    // — reuses a scratch Vector3 rather than allocating one every call; this
+    // runs once per button per frame, so avoiding GC churn here matters.
+    project(x,y,z){
+      if(!this._projVec)this._projVec=new THREE.Vector3();
+      const v=this._projVec.set(x,y,z).project(this.camera);
+      return { x:(v.x*.5+.5)*window.innerWidth, y:(-v.y*.5+.5)*window.innerHeight, front:v.z<1 };
+    },
+
+    _resize(){
+      if(this.mode!=="demo"||!this.renderer)return; // real mode: MindAR handles its own resize
+      this.camera.aspect=window.innerWidth/window.innerHeight;this.camera.updateProjectionMatrix();
+      this.renderer.setSize(window.innerWidth,window.innerHeight);
+    },
+
+    // Coarse, hysteresis-guarded quality downgrade for weaker phones: if
+    // average FPS stays under 40 for a few consecutive ~1.5s samples, step
+    // down pixel ratio, then particle density. Never steps back up (a
+    // prototype-appropriate one-way ratchet, not a full dynamic LOD system —
+    // avoids oscillating quality mid-session).
+    _adaptQuality(dt){
+      if(!this.renderer)return;
+      this._qFrames++; this._qFpsT+=dt;
+      if(this._qFpsT<1.5)return;
+      const avgFps=this._qFrames/this._qFpsT;
+      this._qFrames=0;this._qFpsT=0;
+
+      if(avgFps>=40){ this._lowFpsStreak=0; return; }
+      this._lowFpsStreak++;
+      if(this._lowFpsStreak>=2 && this._qualityStep<1){
+        this._qualityStep=1;
+        this.renderer.setPixelRatio(1);
+        Debug.set("quality",`reduced: pixelRatio=1 (avg fps was ${avgFps.toFixed(0)})`);
+      }else if(this._lowFpsStreak>=4 && this._qualityStep<2){
+        this._qualityStep=2;
+        if(this.dust)this.dust.visible=false;
+        Debug.set("quality","reduced: pixelRatio=1, particles off");
+      }
+    },
+
+    _startLoop(){
+      if(this._loopRunning)return;
+      this._loopRunning=true;
+      this._last=performance.now();
+      this._loop();
+    },
+
+    stopLoop(){
+      if(this._raf)cancelAnimationFrame(this._raf);
+      this._raf=null;this._loopRunning=false;
+    },
+
+    _loop(){
+      this._raf=requestAnimationFrame(()=>this._loop());
+      const now=performance.now();let dt=(now-this._last)/1000;this._last=now;dt=Math.min(dt,.05);
+      this._clock+=dt;
+      Debug.tickFPS(dt);
+      this._adaptQuality(dt);
+      updateTweens(dt);
+
+      // Real mode: turn MindAR's raw (noisy) tracked matrix into a smoothed,
+      // outlier-rejected transform on `root` every frame, BEFORE Character/
+      // beam/dust/burst (all children of `root`) get updated or rendered.
+      // becameVisible/becameHidden are edge-triggered — they fire once per
+      // genuine state change, never per noisy frame — so the app's "card
+      // detected" / "card lost" UI reacts to real transitions, not flicker.
+      if(this.mode==="real"&&this.trackAnchor){
+        const {becameVisible,becameHidden}=PoseSmoother.update(this.trackAnchor,this.root,dt,now);
+        if(becameVisible) App.onTrackingConfirmed();
+        if(becameHidden) App.onTrackingLostConfirmed();
+      }
+
+      // Skip animating content nobody can see: in real mode, `root` is
+      // invisible for however long the card is out of frame — which can be
+      // indefinite (user hasn't found the card yet, or walked away) — so
+      // driving dust/burst/panel/character every frame regardless wastes
+      // CPU (and battery) on invisible work the whole time. This never
+      // touches tracking itself — PoseSmoother.update() above still runs
+      // unconditionally every frame either way, so found/lost detection is
+      // unaffected. Demo mode has no such hidden state (root is always
+      // visible once built), so this is a no-op there.
+      const contentVisible = this.mode!=="real" || this.root.visible;
+
+      if(contentVisible){
+        if(this.dust){const a=this.dust.geometry.attributes.position.array,s=this.dust.userData.spd,span=this.dust.userData.span;
+          for(let i=0;i<s.length;i++){a[i*3+1]+=s[i]*dt;if(a[i*3+1]>span)a[i*3+1]=-span;}
+          this.dust.geometry.attributes.position.needsUpdate=true;this.dust.rotation.y+=dt*.02;}
+
+        if(this._burstLife>0){this._burstLife-=dt*.8;const a=this.burst.geometry.attributes.position.array,vel=this.burst.userData.vel,n=this.burst.userData.n;
+          for(let i=0;i<n;i++){a[i*3]+=vel[i*3]*dt;a[i*3+1]+=vel[i*3+1]*dt;a[i*3+2]+=vel[i*3+2]*dt;vel[i*3+1]-=1.6*dt;}
+          this.burst.geometry.attributes.position.needsUpdate=true;this.burst.material.opacity=Math.max(0,this._burstLife)*.9;}
+
+        // Subtle "holographic" idle motion — rotation wobble + a slight
+        // vertical drift around its own resting position. Deliberately
+        // doesn't touch opacity, so it never fights the fade-in tween above.
+        if(this.panel){
+          this.panel.rotation.y=-0.35+Math.sin(this._clock*0.6)*0.04;
+          this.panel.position.y=this.panel.userData.baseY+Math.sin(this._clock*0.8)*0.02;
+        }
+
+        Character.update(dt,this._clock);
+      }
+
+      if(this.mode==="demo"&&!REDUCED){this._px=lerp(this._px,this._tpx,.06);this._py=lerp(this._py,this._tpy,.06);
+        this.root.rotation.y=this._px*.18;this.root.rotation.x=this._py*.10;}
+
+      // Render FIRST, then project button positions — rendering is what
+      // triggers Three.js's updateMatrixWorld() pass, so doing it before
+      // UI.updatePositions() means the buttons use this frame's fresh world
+      // transform instead of lagging one frame behind (which reads as a
+      // subtle stutter between the 3D character and its HTML buttons).
+      if(this.renderer&&this.scene&&this.camera) this.renderer.render(this.scene,this.camera);
+      UI.updatePositions();
+    }
+  };
+
+  /* ============================================================================
+     █  CHARACTER LAYER  █  (procedural placeholder; swap for a GLB via config)
+     build(parent, {scale, baseY, startY, startZ}) — positions are mode-aware:
+     demo mode and real (anchor-relative) mode use very different coordinate
+     scales, so the caller supplies where "resting" and "rising from" are.
+     ============================================================================ */
+  const Character = {
+    group:null,visible:false,armL:null,armR:null,eyes:[],
+    _waveT:-1,_baseY:0.2,_startY:-0.9,_startZ:0.15,_scale:1,
+
+    // GLB-specific state — stays null/empty for the procedural fallback,
+    // so the procedural arm/eye animation below (already guarded with
+    // `if(this.armL)` etc.) naturally no-ops when a model is in use.
+    mixer:null,actions:{},_usingModel:false,
+
+    build(parent,opts={}){
+      this._scale=opts.scale??1; this._baseY=opts.baseY??0.2; this._startY=opts.startY??-0.9; this._startZ=opts.startZ??0.15;
+      this.armL=null;this.armR=null;this.eyes=[];this.mixer=null;this.actions={};this._usingModel=false;
+
+      const g=new THREE.Group();this.group=g;g.scale.setScalar(0.001);g.position.set(0,this._startY,this._startZ);parent.add(g);
+
+      if(CONFIG.assets.characterModelUrl){
+        this._usingModel=true;
+        import("three/addons/loaders/GLTFLoader.js").then(({GLTFLoader})=>{
+          new GLTFLoader().load(CONFIG.assets.characterModelUrl,(gltf)=>{
+            if(this.group!==g)return; // a newer build() ran (mode switch/scan-again) — drop this stale load
+            const m=gltf.scene;
+            m.scale.setScalar(CONFIG.ar.characterModelScale);
+            g.add(m);
+            if(gltf.animations && gltf.animations.length){
+              this.mixer=new THREE.AnimationMixer(m);
+              // Some exporters (e.g. Mixamo-style rigs) prefix every clip
+              // with the armature name, like "CharacterArmature|Wave" —
+              // strip that so lookups like this.actions.Idle/.Wave below
+              // keep working regardless of which model is loaded.
+              gltf.animations.forEach(clip=>{
+                const key=clip.name.includes("|")?clip.name.split("|").pop():clip.name;
+                this.actions[key]=this.mixer.clipAction(clip);
+              });
+              // Some character packs ship a weight-shifted "combat ready"
+              // Idle alongside a calmer "Idle_Neutral" — prefer the calmer
+              // one everywhere `.actions.Idle` is used below; it reads as
+              // a normal standing pose instead of a game-ready stance.
+              if(this.actions.Idle_Neutral) this.actions.Idle=this.actions.Idle_Neutral;
+              // generic "return to idle" — works for Wave, ThumbsUp, or
+              // whatever one-shot action wave() ends up triggering
+              this.mixer.addEventListener("finished",(e)=>{
+                const idle=this.actions.Idle;
+                if(idle && e.action!==idle){ e.action.fadeOut(0.3); idle.reset().fadeIn(0.3).play(); }
+              });
+              // covers the case where the (small, ~450KB) download finishes
+              // AFTER emerge() already ran and found no actions to play yet
+              if(this.visible && this.actions.Idle) this.actions.Idle.reset().fadeIn(0.3).play();
+            }
+          },undefined,()=>{
+            if(this.group!==g)return;
+            toast("3D model failed to load — using placeholder character.");
+            this._usingModel=false;
+            this._buildProcedural(g);
+          });
+        }).catch(()=>{ if(this.group===g){ this._usingModel=false; this._buildProcedural(g); } });
+      }else{
+        this._buildProcedural(g);
+      }
+    },
+
+    // The original hand-built primitive character — default when no
+    // CONFIG.assets.characterModelUrl is set, and the fallback if a GLB
+    // fails to load.
+    _buildProcedural(g){
+      const bodyMat=new THREE.MeshStandardMaterial({color:0xeaf1ff,roughness:.35,metalness:.35,emissive:new THREE.Color(CONFIG.theme.accent),emissiveIntensity:.06});
+      const accMat=new THREE.MeshStandardMaterial({color:new THREE.Color(CONFIG.theme.accent),emissive:new THREE.Color(CONFIG.theme.accent),emissiveIntensity:.9,roughness:.3,metalness:.2});
+      const darkMat=new THREE.MeshStandardMaterial({color:0x0c1424,roughness:.4,metalness:.5});
+
+      const body=new THREE.Mesh(new THREE.SphereGeometry(0.42,32,32),bodyMat);body.scale.set(1,1.12,1);body.position.y=0.02;g.add(body);
+      const belt=new THREE.Mesh(new THREE.TorusGeometry(0.30,0.045,16,40),accMat);belt.position.y=-0.02;belt.rotation.x=Math.PI/2;g.add(belt);
+      const head=new THREE.Mesh(new THREE.SphereGeometry(0.34,32,32),bodyMat);head.position.y=0.62;g.add(head);
+      const visor=new THREE.Mesh(new THREE.SphereGeometry(0.345,32,24,0,Math.PI*2,Math.PI*0.28,Math.PI*0.3),darkMat);visor.position.y=0.62;g.add(visor);
+      for(const dx of [-0.11,0.11]){const e=new THREE.Mesh(new THREE.SphereGeometry(0.045,16,16),accMat);e.position.set(dx,0.63,0.31);g.add(e);this.eyes.push(e);}
+      const ant=new THREE.Mesh(new THREE.CylinderGeometry(0.012,0.012,0.22,8),darkMat);ant.position.y=1.0;g.add(ant);
+      const tip=new THREE.Mesh(new THREE.SphereGeometry(0.05,16,16),accMat);tip.position.y=1.12;g.add(tip);
+      const mkArm=(x)=>{const a=new THREE.Group();const s=new THREE.Mesh(new THREE.SphereGeometry(0.09,16,16),bodyMat);s.scale.set(1,1.7,1);a.add(s);a.position.set(x,0.12,0.02);g.add(a);return a;};
+      this.armL=mkArm(-0.5);this.armR=mkArm(0.5);
+      this.armL.rotation.z=0.5;this.armR.rotation.z=-0.5;
+    },
+
+    emerge(){
+      this.visible=true;const g=this.group;const finalScale=this._scale;
+      tween({dur:CONFIG.timing.emerge/1000,ease:easeOutBack,onUpdate:(v)=>{g.scale.setScalar(Math.max(.001,v)*finalScale);}});
+      tween({dur:CONFIG.timing.emerge/1000,ease:easeOutCubic,onUpdate:(v)=>{g.position.y=lerp(this._startY,this._baseY,v);}});
+      tween({dur:CONFIG.timing.emerge/1000,ease:easeOutCubic,onUpdate:(v)=>{g.rotation.y=lerp(-Math.PI*0.7,0,v);}});
+      if(this._usingModel && this.actions.Idle) this.actions.Idle.reset().fadeIn(0.4).play();
+    },
+
+    wave(){
+      this._waveT=0; // drives the procedural arm-wave below; harmless no-op when using a model
+      if(this._usingModel){
+        const idle=this.actions.Idle, act=this.actions.Wave||this.actions.ThumbsUp||this.actions.Yes;
+        if(act){
+          act.reset(); act.setLoop(THREE.LoopOnce); act.clampWhenFinished=true;
+          if(idle) idle.fadeOut(0.25);
+          act.fadeIn(0.25).play();
+        }
+      }
+    },
+
+    reset(){
+      this.visible=false;this._waveT=-1;
+      const g=this.group;if(!g)return;
+      g.scale.setScalar(0.001);g.position.set(0,this._startY,this._startZ);g.rotation.set(0,0,0);
+      if(this.armR)this.armR.rotation.z=-0.5;
+      if(this.mixer)this.mixer.stopAllAction();
+    },
+
+    update(dt,clock){
+      const g=this.group;if(!g||!this.visible)return;
+      g.position.y=this._baseY+Math.sin(clock*1.5)*0.05*Math.max(this._scale,.5);
+      g.rotation.y=Math.sin(clock*0.6)*0.12;
+      if(this.mixer)this.mixer.update(dt);
+      if(this.armL)this.armL.rotation.z=0.5+Math.sin(clock*1.3)*0.08;
+      if(this._waveT>=0){this._waveT+=dt;const dur=CONFIG.timing.wave/1000;const p=this._waveT/dur;
+        if(p>=1){this._waveT=-1;if(this.armR)this.armR.rotation.z=-0.5;}
+        else if(this.armR){this.armR.rotation.z=-1.3+Math.sin(this._waveT*18)*0.4;}}
+      else if(this.armR){this.armR.rotation.z=-0.5-Math.sin(clock*1.3)*0.08;}
+      const blink=(Math.sin(clock*0.7)>0.985)?0.15:1;this.eyes.forEach(e=>e.scale.y=lerp(e.scale.y,blink,0.4));
+    }
+  };
+
+  /* ============================================================================
+     █  INTERACTION LAYER  █  (floating buttons that orbit + track the character)
+     ============================================================================ */
+  const UI = {
+    els:[],live:false,_wp:null,
+
+    build(){
+      const wrap=$("#buttons");wrap.innerHTML="";this.els=[];
+      CONFIG.buttons.forEach((b,i)=>{
+        const icon=CONFIG.assets.icons[b.key]||"";
+        const isUrl=typeof icon==="string" && /^(https?:)?\/\//.test(icon);
+        const el=document.createElement("button");
+        el.className="ar-btn";el.style.setProperty("--bc",b.color);el.setAttribute("aria-label",b.label);
+        el.innerHTML=`<span class="ar-btn__f"><span class="ar-btn__p"><span class="orb">${isUrl?`<img src="${icon}" alt="" style="width:26px;height:26px">`:icon}</span></span><span class="lab">${b.label}</span></span>`;
+        const pop=el.querySelector(".ar-btn__p");pop.style.animationDelay=(i*CONFIG.timing.buttonStagger/1000)+"s";
+        el.addEventListener("click",(ev)=>this._tap(ev,el,b));
+        wrap.appendChild(el);
+        this.els.push({el,slot:i});
+      });
+    },
+
+    reveal(){
+      this.live=true;
+      this.els.forEach(({el})=>{el.classList.remove("in");void el.offsetWidth;el.classList.add("in","live");});
+      this.updatePositions();
+    },
+
+    hide(){
+      this.live=false;
+      this.els.forEach(({el})=>el.classList.remove("in","live"));
+    },
+
+    updatePositions(){
+      if(!this.live||!Stage.camera||!Character.group)return;
+      if(!this._wp)this._wp=new THREE.Vector3();
+      const c=Character.group;c.getWorldPosition(this._wp);
+      // GLB models are rigged with their origin at the feet, so the
+      // button-orbit anchor needs to be lifted most of the way up the
+      // character's actual height (chest-ish). The procedural character's
+      // origin already sits near its torso, so it only needs a small nudge.
+      const liftY=Character._usingModel
+        ? Character._scale*CONFIG.ar.characterModelScale*CONFIG.ar.characterModelRawHeight*CONFIG.ar.buttonAnchorFraction
+        : 0.15*Math.max(Character._scale,.5);
+      const a=Stage.project(this._wp.x,this._wp.y+liftY,this._wp.z);
+      const R=clamp(Math.min(window.innerWidth,window.innerHeight)*0.30,96,178);
+      const step=(Math.PI*2)/this.els.length,start=-Math.PI/2;
+      this.els.forEach(({el,slot})=>{
+        const ang=start+step*slot;
+        const x=a.x+Math.cos(ang)*R, y=a.y+Math.sin(ang)*R;
+        // transform (not left/top) so this is a compositor-only update —
+        // left/top would trigger a full layout recalculation 60x/sec.
+        el.style.transform=`translate(${x.toFixed(1)}px,${y.toFixed(1)}px) translate(-50%,-50%)`;
+      });
+    },
+
+    _tap(ev,el,b){
+      const orb=el.querySelector(".orb");if(orb){const r=document.createElement("span");r.className="ripple";
+        const rect=orb.getBoundingClientRect();r.style.left=(ev.clientX-rect.left)+"px";r.style.top=(ev.clientY-rect.top)+"px";
+        r.style.width=r.style.height="18px";orb.appendChild(r);later(()=>r.remove(),600);}
+      this.open(CONFIG.profile.links[b.key],b.label);
+    },
+
+    open(url,label){
+      if(!url){toast("No link set for "+label);return;}
+      try{
+        if(/^(mailto:|tel:)/i.test(url)){window.location.href=url;}
+        else{const w=window.open(url,"_blank","noopener,noreferrer");if(!w)toast("Pop-up blocked — link: "+label);}
+      }catch(e){toast("Couldn't open "+label);}
+    }
+  };
+
+  /* ============================================================================
+     █  REAL TRACKER  █  Thin wrapper around MindAR's image-target tracking.
+     Exposes MindAR's raw found/lost signal only for the debug panel — the
+     App state machine reacts to Stage/PoseSmoother's SMOOTHED visibility
+     instead (App.onTrackingConfirmed/onTrackingLostConfirmed), so a single
+     noisy CV frame can't flicker the UI. Stage/Character/UI never touch
+     MindAR internals directly, so the tracking tech could be swapped later
+     without touching them.
+     ============================================================================ */
+  const RealTracker = {
+    mindar:null,anchor:null,ready:false,
+
+    async _probeCamera(){
+      // Runs our own getUserMedia first so a rejection carries a real
+      // err.name (MindAR's own internal call swallows that detail).
+      const stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:"environment"}},audio:false});
+      stream.getTracks().forEach(t=>t.stop());
+      // Some Android camera stacks need a beat to fully release the device
+      // before it can be reopened by MindAR's own getUserMedia call.
+      await new Promise(r=>setTimeout(r,150));
+    },
+
+    async start(){
+      if(!window.isSecureContext){
+        const e=new Error("insecure"); e.code="insecure"; throw e;
+      }
+      if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia){
+        const e=new Error("unsupported"); e.code="unsupported"; throw e;
+      }
+
+      Debug.set("camera","requesting…");Debug.set("tracker","-");Debug.set("target","-");
+      try{
+        await this._probeCamera();
+      }catch(err){
+        const denied = err && (err.name==="NotAllowedError"||err.name==="SecurityError");
+        const e=new Error("camera"); e.code=denied?"denied":"camera"; throw e;
+      }
+      Debug.set("camera","ready");
+
+      let MindARThree;
+      try{
+        ({ MindARThree } = await import(CONFIG.ar.mindarSrc));
+      }catch(err){
+        const e=new Error("load-failed"); e.code="load-failed"; throw e;
+      }
+
+      try{
+        this.mindar=new MindARThree({
+          container:$("#arContainer"),
+          imageTargetSrc:CONFIG.assets.mindTargetUrl,
+          uiLoading:"no",uiScanning:"no",uiError:"no",
+          // Tuned in CONFIG.tracking — see the comment there for why these
+          // are kept fairly light/responsive (the app's own PoseSmoother
+          // layer does the bulk of the smoothing, more accurately).
+          warmupTolerance:CONFIG.tracking.mindarWarmupTolerance,
+          missTolerance:CONFIG.tracking.mindarMissTolerance,
+          filterMinCF:CONFIG.tracking.mindarFilterMinCF,
+          filterBeta:CONFIG.tracking.mindarFilterBeta
+        });
+      }catch(err){
+        const e=new Error("webgl"); e.code="webgl"; throw e;
+      }
+
+      // These fire on MindAR's RAW (fast, noisy, frame-count-debounced by
+      // mindarWarmupTolerance/mindarMissTolerance) found/lost signal — used
+      // here only to keep the debug panel honest about what the tracker
+      // itself is seeing. The app's actual UI reacts to Stage's SMOOTHED,
+      // grace-period-protected visibility instead (see PoseSmoother +
+      // App.onTrackingConfirmed/onTrackingLostConfirmed) so a single raw
+      // blip can't flicker the character or buttons.
+      this.anchor=this.mindar.addAnchor(0);
+      this.anchor.onTargetFound=()=>Debug.set("target","FOUND (raw)");
+      this.anchor.onTargetLost=()=>Debug.set("target","LOST (raw)");
+
+      Debug.set("tracker","initializing…");
+      try{
+        // MindAR's start() can hang forever (never resolve OR reject) if its
+        // internal WebGL/TF.js backend init fails on an unusual device — a
+        // promise bug in their own library. Race it against a timeout so a
+        // failure like that shows a real error instead of an infinite spinner.
+        await Promise.race([
+          this.mindar.start(),
+          new Promise((_,rej)=>later(()=>rej(new Error("timeout")),15000))
+        ]);
+      }catch(err){
+        // Camera already proved working via _probeCamera above, so a failure
+        // here is most likely the .mind target file (wrong path / not served
+        // over http(s) / 404) or a WebGL/tracking backend issue, not the
+        // camera itself.
+        const e=new Error("target-load"); e.code="target-load"; throw e;
+      }
+
+      Debug.set("tracker","SEARCHING");Debug.set("target","SEARCHING");
+      this.ready=true;
+      Stage.attachReal(this.mindar,this.anchor.group);
+    },
+
+    reFireIfVisible(){
+      if(PoseSmoother._visible){ App.onTrackingConfirmed(); return true; }
+      return false;
+    },
+
+    stop(){
+      Stage.stopLoop();
+      if(this.mindar){ try{ this.mindar.stop(); }catch(e){} }
+      const c=$("#arContainer"); c.innerHTML="";
+      this.mindar=null;this.anchor=null;this.ready=false;
+    }
+  };
+
+  /* ============================================================================
+     █  DEMO SIMULATOR  █  Fake timer-based detection — DEMO MODE ONLY.
+     Clearly separate from RealTracker; never runs at the same time.
+     ============================================================================ */
+  const DemoSimulator = {
+    _timer:null,
+    start(onDetected){ this._timer=later(onDetected, REDUCED?900:CONFIG.timing.scan); },
+    stop(){ if(this._timer){clearTimeout(this._timer);this._timer=null;} }
+  };
+
+  /* ============================================================================
+     █  APP / STATE MACHINE  █
+     IDLE → CAMERA_READY → SEARCHING → CARD_DETECTED → AR_ACTIVE → CARD_LOST →
+     TRACKING_RESUMED (real mode). Demo mode reuses CARD_DETECTED/AR_ACTIVE too.
+     ============================================================================ */
+  const STATE={
+    IDLE:"idle",CAMERA_READY:"camera_ready",SEARCHING:"searching",
+    CARD_DETECTED:"card_detected",EMERGE:"emerge",AR_ACTIVE:"ar_active",
+    CARD_LOST:"card_lost",TRACKING_RESUMED:"tracking_resumed"
+  };
+  const App = {
+    state:STATE.IDLE,mode:null,
+
+    setState(s){ this.state=s; Debug.set("state",s); },
+
+    init(){
+      if(!WebGLAvailable()){
+        fatal("3D not supported","Your browser can’t run WebGL. Try a recent version of Chrome or Safari.");return;
+      }
+      DeviceTier.detect(); // quality-only estimate — see the comment on DeviceTier itself
+      UI.build();
+      $("#hudName").textContent=CONFIG.profile.name;
+      $("#hudTitle").textContent=CONFIG.profile.title;
+      $("#introName").textContent=CONFIG.profile.name;
+      $("#introRole").textContent=CONFIG.profile.title;
+      $("#introTagline").textContent=CONFIG.profile.tagline;
+      const av=$("#avatar");
+      if(CONFIG.assets.profileImage){av.innerHTML=`<img src="${CONFIG.assets.profileImage}" alt="">`;}
+      else{av.textContent=CONFIG.profile.name.split(" ").map(w=>w[0]).slice(0,2).join("").toUpperCase();}
+
+      // Warm the network cache for the two heaviest downloads (MindAR's
+      // tracking bundle, the character GLB) while the intro plays, so
+      // starting the camera a moment later feels close to instant instead
+      // of stalling on a fresh fetch. Fire-and-forget — RealTracker.start()
+      // imports the same MindAR URL again later, which the browser's module
+      // cache resolves instantly since the fetch already happened here.
+      import(CONFIG.ar.mindarSrc).catch(()=>{});
+      if(CONFIG.assets.characterModelUrl) fetch(CONFIG.assets.characterModelUrl,{mode:"cors"}).catch(()=>{});
+
+      // The start screen IS the AR intro — the user already scanned the
+      // QR, so this should feel like a continuation, not a second "please
+      // press start" step. It auto-advances into the real camera flow
+      // after a short beat; tapping anywhere (except the demo link) skips
+      // the wait immediately, which also guarantees a real user-gesture is
+      // available right before requesting the camera if any browser wants one.
+      let advanced=false;
+      const advanceIntro=()=>{
+        if(advanced)return; advanced=true;
+        clearTimeout(introTimer);
+        this.startReal();
+      };
+      const introTimer=setTimeout(advanceIntro,1600);
+      $("#start").addEventListener("click",advanceIntro);
+      $("#demoBtn").addEventListener("click",(e)=>{
+        e.stopPropagation();
+        if(advanced)return; advanced=true; clearTimeout(introTimer);
+        this.startDemo();
+      });
+
+      $("#fatalDemoBtn").addEventListener("click",()=>{ $("#fatal").classList.remove("on"); this.startDemo(); });
+      $("#again").addEventListener("click",()=>this.scanAgain());
+      $("#debugToggle").addEventListener("click",()=>Debug.toggle());
+
+      // ?debug=1 auto-opens the panel (handy when you can't easily tap the
+      // tiny corner button mid-test); the button still works either way.
+      if(new URLSearchParams(location.search).get("debug")==="1") Debug.toggle();
+    },
+
+    /* ---------------- REAL MODE ---------------- */
+    async startReal(){
+      $("#start").classList.add("hide");
+      this.mode="real";this.setState(STATE.CAMERA_READY);
+      $("#status").classList.add("on");
+      $("#statusDot").className="dot searching";$("#statusText").textContent="Starting camera…";
+      $("#scan").classList.add("on");
+      try{
+        await RealTracker.start();
+        this.setState(STATE.SEARCHING);
+        $("#statusText").textContent="Point your camera at your card ✨";
+      }catch(err){
+        this._showTrackerError(err);
+      }
+    },
+
+    // Called once per genuine tracking (re)acquisition — either the real
+    // tracker's smoothed pose transitioning not-visible→visible (see
+    // Stage._loop()/PoseSmoother), or the demo timer firing. Never called
+    // repeatedly for the same continuous tracking session.
+    onTrackingConfirmed(){
+      Debug.set("tracker","ACTIVE");
+      const resumed = this.state===STATE.AR_ACTIVE || this.state===STATE.CARD_LOST;
+      this.setState(resumed?STATE.TRACKING_RESUMED:STATE.CARD_DETECTED);
+      $("#statusDot").className="dot ok";
+      $("#statusText").textContent = resumed ? "Tracking resumed ✓" : "Card detected ✓";
+      $("#reticle").classList.add("detected");
+      Character.reset();Stage.resetVisual();
+      Stage.fireDetection();
+      later(()=>{ $("#scan").classList.remove("on"); this.emerge(); }, CONFIG.timing.detect);
+    },
+
+    // Called once when the smoothed pose has been unavailable for longer
+    // than CONFIG.tracking.lostGraceMs — i.e. a genuine loss, not a blip.
+    onTrackingLostConfirmed(){
+      Debug.set("tracker","searching");
+      this.setState(STATE.CARD_LOST);
+      UI.hide();$("#hud").classList.remove("on");
+      $("#scan").classList.add("on");$("#reticle").classList.remove("detected");
+      $("#status").classList.add("on");
+      $("#statusDot").className="dot lost";$("#statusText").textContent="Card lost — move camera back to the card";
+    },
+
+    /* ---------------- DEMO MODE ---------------- */
+    startDemo(){
+      $("#start").classList.add("hide");
+      this.mode="demo";
+      $("#demoBanner").classList.add("on");
+      Debug.set("camera","N/A (demo)");Debug.set("tracker","N/A (demo)");Debug.set("target","N/A (demo)");
+      if(Stage.mode!=="demo") Stage.initDemo();
+      this.beginDemoScan();
+    },
+
+    beginDemoScan(){
+      this.setState(STATE.SEARCHING);
+      Character.reset();Stage.resetVisual();UI.hide();$("#hud").classList.remove("on");
+      $("#reticle").classList.remove("detected");
+      $("#scan").classList.add("on");
+      $("#status").classList.add("on");$("#statusDot").className="dot searching";$("#statusText").textContent="Searching for card… (simulated)";
+      DemoSimulator.start(()=>this.onTrackingConfirmed());
+    },
+
+    /* ---------------- SHARED ---------------- */
+    emerge(){
+      this.setState(STATE.EMERGE);
+      Character.emerge();
+      later(()=>this.activate(), CONFIG.timing.emerge);
+    },
+
+    activate(){
+      this.setState(STATE.AR_ACTIVE);
+      $("#status").classList.remove("on");
+      Character.wave();
+      UI.reveal();
+      $("#hud").classList.add("on");
+    },
+
+    scanAgain(){
+      if(this.mode==="real"){
+        Character.reset();Stage.resetVisual();UI.hide();$("#hud").classList.remove("on");
+        $("#scan").classList.add("on");$("#status").classList.add("on");
+        if(!RealTracker.reFireIfVisible()){
+          this.setState(STATE.SEARCHING);
+          $("#statusDot").className="dot searching";$("#statusText").textContent="Point your camera at your card ✨";
+        }
+      }else{
+        clearTimers();clearTweens();DemoSimulator.stop();
+        this.beginDemoScan();
+      }
+    },
+
+    _showTrackerError(err){
+      $("#scan").classList.remove("on");$("#status").classList.remove("on");
+      const messages={
+        insecure:["Camera needs HTTPS","This page must be served over https:// (or localhost) for the browser to allow camera access. See the README for a one-command way to test this on your phone.",false],
+        unsupported:["Camera not supported","This browser doesn't support camera access (getUserMedia). Try a recent Chrome (Android) or Safari (iOS).",true],
+        denied:["Camera permission blocked","Camera access was denied. Allow camera permission for this site in your browser settings, then reload.",true],
+        camera:["Couldn't access camera","No usable camera was found, or it's already in use by another app. Close other camera apps/tabs and try again.",true],
+        "load-failed":["Couldn't load AR library","The image-tracking library failed to load. Check your internet connection and reload.",true],
+        "target-load":["Couldn't start tracking","The camera works, but the card's target file (targets/card.mind) couldn't be loaded. Make sure you're serving this page over http(s) — not opening the file directly — and that targets/card.mind exists. See the README.",true],
+        webgl:["3D not supported","Your browser can't run WebGL, which real AR tracking requires. Try a recent version of Chrome or Safari.",false]
+      };
+      const [title,msg,offerDemo]=messages[err.code]||["AR unavailable","Something went wrong starting the camera / tracker.",true];
+      fatal(title,msg,{offerDemo});
+    }
+  };
+
+  function WebGLAvailable(){
+    try{
+      const c=document.createElement("canvas");
+      return !!(window.WebGLRenderingContext && (c.getContext("webgl")||c.getContext("experimental-webgl")));
+    }catch(e){ return false; }
+  }
+
+  // Exposed for troubleshooting on a real phone via remote debugging (e.g.
+  // chrome://inspect from a laptop, or Safari's Web Inspector for iOS) —
+  // lets you trigger App.onTrackingConfirmed()/onTrackingLostConfirmed()
+  // from the console to test the character/buttons animation without
+  // needing the card in frame.
+  window.__AR__ = { App, RealTracker, Stage, Character, PoseSmoother, DeviceTier, CONFIG };
+
+  /* ---- boot ---- */
+  window.addEventListener("DOMContentLoaded",()=>App.init());
+
+  // Release the camera + tracker cleanly when the user navigates away or the
+  // tab is backgrounded — otherwise the camera stays on until the tab dies.
+  window.addEventListener("pagehide",()=>{ if(RealTracker.ready) RealTracker.stop(); });
+  </script>
+</body>
+</html>

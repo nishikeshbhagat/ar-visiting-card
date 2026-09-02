@@ -1,0 +1,22 @@
+{
+  "name": "ar-card-target-compiler",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Regenerates targets/card.mind from assets/card-target.jpg using MindAR's Node-compatible offline compiler, regenerates the QR code data embedded in index.html, and trims unused animation clips from the character GLB.",
+  "scripts": {
+    "compile": "node compile-target.mjs ../assets/card-target.jpg ../targets/card.mind",
+    "qr": "node regenerate-qr.mjs",
+    "strip-character": "node strip-character-animations.mjs"
+  },
+  "dependencies": {
+    "@gltf-transform/core": "^4.5.0",
+    "@gltf-transform/functions": "^4.5.0",
+    "canvas": "^3.2.3",
+    "mind-ar": "1.2.5",
+    "qrcode": "^1.5.4"
+  },
+  "overrides": {
+    "canvas": "^3.2.3"
+  }
+}
