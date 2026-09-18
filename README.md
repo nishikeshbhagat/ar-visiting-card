@@ -3,6 +3,47 @@
 Point a phone camera at a physical card and AR content anchors to it. No fake
 timers — the card itself is the trigger.
 
+**🔗 [Try it live](https://googlescan.netlify.app/)** — open this on your
+phone, or scan the QR code printed on the card image at
+`assets/card-target.jpg`, to try the real thing yourself.
+> If this link doesn't reflect the latest version, it just means the newest
+> code hasn't been redeployed to that host yet — see "Running it locally"
+> below to run it yourself in the meantime.
+
+## How it works (in plain words)
+
+You don't need to know anything technical to use this — here's the whole
+experience, step by step:
+
+1. **Scan the QR code** on the physical card (or tap the live link above).
+   Your phone opens the AR page — no app to install.
+2. **A short intro appears** with the card owner's name and title. It moves
+   on by itself after a couple of seconds, or tap anywhere to skip ahead.
+
+   <img src="docs/screenshots/01-intro.png" width="280" alt="Intro screen showing the card owner's name and a 'point your camera at the card' prompt">
+
+3. **Allow camera access** when your phone asks. Point the camera at the
+   physical card and hold it steady — you'll see a scanning frame while it
+   looks for the card.
+
+   <img src="docs/screenshots/02-searching.png" width="280" alt="Scanning reticle searching for the card, with the card visible in frame">
+
+4. **The card is recognized** and a 3D character rises up out of it, waves
+   hello, and settles in — with glowing contact buttons (WhatsApp, LinkedIn,
+   Instagram, Website, Email, Call) floating around it.
+
+   <img src="docs/screenshots/03-character-active.png" width="280" alt="3D character standing on the card with social/contact buttons floating around it">
+
+5. **Tap any button** to instantly message, call, or visit that profile —
+   no typing, no saving a contact card by hand.
+6. **Move your phone away** and the character disappears; **point it back
+   at the card** and everything reappears right where it should be.
+
+That's it — scan, watch, tap. (The screenshots above are genuine screenshots
+of this app's own "demo mode," included so you can see the real experience
+without needing a phone or the physical card in front of you — see
+"What's actually real here" just below for exactly what that means.)
+
 ## What's actually real here (read this first)
 
 | Part | Status |
