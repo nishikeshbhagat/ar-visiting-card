@@ -15,6 +15,12 @@ phone, or scan the QR code printed on the card image at
 You don't need to know anything technical to use this — here's the whole
 experience, step by step:
 
+**The card itself** (this exact image is what the camera is trained to
+recognize — a printed copy of it is the physical trigger for everything
+below):
+
+<img src="assets/card-target.jpg" width="360" alt="The physical visiting card design, with a real scannable QR code in the corner">
+
 1. **Scan the QR code** on the physical card (or tap the live link above).
    Your phone opens the AR page — no app to install.
 2. **A short intro appears** with the card owner's name and title. It moves
